@@ -9,20 +9,9 @@
     /* =========================================
        基本スタイル (1600px / ガラスデザイン)
        ========================================= */
-    body {
-      margin: 0; min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-size: cover; background-position: center; background-attachment: fixed;
-      transition: background-image 0.5s ease-in-out;
-      color: #ffffff; text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.6);
-      background-color: #2c3e50; overscroll-behavior-y: none; 
-    }
+    body { margin: 0; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-size: cover; background-position: center; background-attachment: fixed; transition: background-image 0.5s ease-in-out; color: #ffffff; text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.6); background-color: #2c3e50; overscroll-behavior-y: none; }
     .container { max-width: 1600px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-    .glass {
-      background: rgba(20, 20, 20, 0.45); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px; padding: 20px;
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    }
+    .glass { background: rgba(20, 20, 20, 0.45); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px; padding: 20px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
     header { display: flex; flex-direction: column; gap: 15px; }
     .header-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; }
     #clock-widget h1 { margin: 0; font-weight: 300; letter-spacing: 2px; line-height: 1.1; transition: all 0.2s;}
@@ -41,7 +30,7 @@
 
     /* サジェストUI */
     .stock-search-wrapper { position: relative; width: 250px; }
-    #stock-suggestions { position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; max-height: 300px; overflow-y: auto; margin-top: 5px; display: none; }
+    #stock-suggestions { position: absolute; top: 100%; left: 0; right: 0; z-index: 9999; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; max-height: 300px; overflow-y: auto; margin-top: 5px; display: none; }
     .suggestion-item { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: 0.2s; }
     .suggestion-item:hover { background: rgba(255,255,255,0.1); }
     .suggestion-item div:first-child { font-weight: bold; color: #82c8ff; font-size: 0.9rem; }
@@ -116,10 +105,10 @@
         <div id="market-ticker" class="market-ticker-container"></div>
         <div class="edit-only" style="margin-top:5px; gap:10px; align-items:center;">
           <div class="stock-search-wrapper">
-            <input type="text" id="stock-search-input" class="edit-input" placeholder="銘柄名で検索 (例: トヨタ)" style="width:100%;">
+            <input type="text" id="stock-search-input" class="edit-input" placeholder="銘柄名で検索して追加 (例: トヨタ)" style="width:100%;">
             <div id="stock-suggestions"></div>
           </div>
-          <span style="font-size:0.75rem; color:#aaa;">※選択すると即座に追加されます</span>
+          <span style="font-size:0.75rem; color:#aaa;">※選択で即追加</span>
         </div>
       </div>
       
@@ -167,13 +156,12 @@
     <button class="ui-btn" onclick="addNewWidget('chart')" style="background:rgba(0,150,136,0.3); border-color:rgba(0,150,136,0.5);">＋ 比較チャート</button>
     <button class="ui-btn" onclick="addNewWidget('spacer')">＋ 空白</button>
     <button class="ui-btn primary-btn" onclick="addNewRow()">＋ 段追加</button>
-    <button class="ui-btn danger-btn" onclick="if(confirm('全データを消去しますか？')) { localStorage.removeItem('portal_state'); location.reload(); }">初期化</button>
   </div>
 </div>
 
 <script>
   // ==========================================
-  // API URL (ご提供いただいたURLをそのまま適用)
+  // API URLの設定済
   // ==========================================
   const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxzjNS50HSy3lGFx3jM5u6hlJwh5t76t6bQmHzjMy1Z_0Z_7aVwvDzy-UOAKSmdXxkpWQ/exec';
 
@@ -192,7 +180,6 @@
   const CHART_COLORS = ['#8ab4f8', '#f28b82', '#fdd663', '#b388ff', '#81c995', '#ffb74d', '#4dd0e1', '#f48fb1'];
 
   async function callGasApi(params) {
-    if (!GAS_API_URL || GAS_API_URL.length < 20) return { data: '', error: 'URL not set' };
     try {
       const query = new URLSearchParams(params).toString();
       const res = await fetch(`${GAS_API_URL}?${query}`);
@@ -208,6 +195,22 @@
     return `rgba(${r},${g},${b},${a})`;
   }
 
+  // チャート用「＋」ボタンが押された時のスマートな挙動
+  function focusStockSearch() {
+    if(!isEditMode) toggleEditMode();
+    setTimeout(() => {
+      const input = document.getElementById('stock-search-input');
+      if(input) {
+        input.focus();
+        input.scrollIntoView({behavior:'smooth', block:'center'});
+        input.style.transition = 'box-shadow 0.3s';
+        input.style.boxShadow = '0 0 15px #8ab4f8';
+        setTimeout(() => input.style.boxShadow = 'none', 1500);
+      }
+    }, 100);
+  }
+
+  // 銘柄検索 (サジェストUI連携)
   async function initStockSearch() {
     const input = document.getElementById('stock-search-input');
     const suggestBox = document.getElementById('stock-suggestions');
@@ -215,11 +218,19 @@
       clearTimeout(searchTimeout);
       const query = input.value.trim();
       if (!query) { suggestBox.style.display = 'none'; return; }
+      
+      suggestBox.innerHTML = '<div style="padding:10px; color:#aaa; font-size:0.8rem; text-align:center;">検索中...</div>';
+      suggestBox.style.display = 'block';
+
       searchTimeout = setTimeout(async () => {
         const res = await callGasApi({ action: 'searchStock', q: query });
-        if (res && res.quotes) {
-          suggestBox.innerHTML = res.quotes.map(q => `<div class="suggestion-item" onclick="selectStock('${q.symbol}', '${q.shortname || q.longname}')"><div>${q.symbol}</div><div>${q.shortname || q.longname} (${q.exchDisp})</div></div>`).join('');
-          suggestBox.style.display = 'block';
+        if (res && res.quotes && res.quotes.length > 0) {
+          suggestBox.innerHTML = res.quotes.map(q => {
+            const safeName = (q.shortname || q.longname || '').replace(/'/g, "\\'");
+            return `<div class="suggestion-item" onclick="selectStock('${q.symbol}', '${safeName}')"><div>${q.symbol}</div><div>${q.shortname || q.longname} (${q.exchDisp})</div></div>`;
+          }).join('');
+        } else {
+          suggestBox.innerHTML = '<div style="padding:10px; color:#aaa; font-size:0.8rem; text-align:center;">見つかりませんでした</div>';
         }
       }, 500);
     });
@@ -231,7 +242,7 @@
     appState.markets.push({ symbol: symbol, label: name });
     document.getElementById('stock-search-input').value = '';
     document.getElementById('stock-suggestions').style.display = 'none';
-    save(); fetchMarketTicker(); renderAll(); // グラフも再描画
+    save(); fetchMarketTicker(); renderAll();
   }
 
   function toggleGeminiMode() { isGeminiMode = !isGeminiMode; document.getElementById('gemini-options-panel').style.display = isGeminiMode ? 'flex' : 'none'; document.getElementById('gemini-toggle-btn').classList.toggle('active', isGeminiMode); }
@@ -276,14 +287,13 @@
   }
   function deleteMarketSymbol(i) { appState.markets.splice(i,1); save(); fetchMarketTicker(); renderAll(); }
 
-  // ★アップデート: 比較チャートロジック (Y軸スケーリングとゼロライン強調)
+  // 比較チャートロジック
   async function fetchAndRenderChart(widgetId, period) {
     const sumContainer = document.getElementById('chart-summary-' + widgetId);
     if (!appState.markets || appState.markets.length === 0) {
-      sumContainer.innerHTML = '銘柄が登録されていません。上部から追加してください。'; return;
+      sumContainer.innerHTML = '銘柄が登録されていません。上部の「編集モード」から追加してください。'; return;
     }
     
-    // キャッシュがない場合のみAPI通信（1年分のデータを一括取得）
     if (!chartDataCache[widgetId] || chartDataCache[widgetId].raw.length !== appState.markets.length) {
       sumContainer.innerHTML = 'データ取得中...';
       try {
@@ -306,7 +316,6 @@
     const cache = chartDataCache[widgetId]; if (!cache) return;
     cache.period = period; const rawData = cache.raw;
 
-    // 1. 期間によるカットオフ時間
     const now = new Date(); let cutoffDate = new Date();
     if (period === '1W') cutoffDate.setDate(now.getDate() - 7);
     else if (period === '1M') cutoffDate.setMonth(now.getMonth() - 1);
@@ -316,13 +325,11 @@
     else if (period === '1Y') cutoffDate.setFullYear(now.getFullYear() - 1);
     const cutoff = Math.floor(cutoffDate.getTime() / 1000);
 
-    // 2. タイムスタンプ統合
     let tsSet = new Set();
     rawData.forEach(d => { d.timestamps.forEach(t => { if (t >= cutoff) tsSet.add(t); }); });
     const sortedTs = Array.from(tsSet).sort((a,b)=>a-b);
     const labels = sortedTs.map(t => new Date(t*1000).toLocaleDateString('ja-JP', {month:'short', day:'numeric'}));
 
-    // 3. データセット構築と変化率計算
     const datasets = []; let summaryHtml = '';
     rawData.forEach((d, i) => {
       const priceMap = {}; d.timestamps.forEach((t, idx) => priceMap[t] = d.closes[idx]);
@@ -330,7 +337,7 @@
 
       sortedTs.forEach(t => {
         let p = priceMap[t] !== undefined ? priceMap[t] : lastP;
-        if (p !== null && basePrice === null) basePrice = p; // 指定期間の「最初」の価格を完全な0%の基準にする
+        if (p !== null && basePrice === null) basePrice = p; 
         lastP = p;
         dataPoints.push((basePrice !== null && p !== null) ? ((p - basePrice) / basePrice) * 100 : null);
       });
@@ -345,35 +352,29 @@
       if(finalReturn === null) finalReturn = 0;
       summaryHtml += `<div style="background:rgba(255,255,255,0.1); padding:4px 10px; border-radius:8px;">
                         <span style="color:${color}; font-size:1.2rem; vertical-align:middle;">■</span> 
-                        ${d.market.label}: <b class="${finalReturn>=0?'diff-up':'diff-down'}">${finalReturn>=0?'+':''}${finalReturn.toFixed(2)}%</b>
+                        ${d.market.label}: <b class="${finalReturn>=0?'diff-up':'diff-down'}">${finalReturn>=0?'+':''}${finalReturn.toFixed(1)}%</b>
                       </div>`;
     });
 
-    // 4. UI更新
     const pLabels = {'1W':'1週間', '1M':'1ヶ月', '3M':'3ヶ月', '6M':'半年', 'YTD':'年初来', '1Y':'1年'};
     document.getElementById('chart-controls-' + widgetId).innerHTML = Object.keys(pLabels).map(p => 
       `<button onclick="renderChartOnly('${widgetId}', '${p}')" style="background:${p===period ? 'rgba(130,200,255,0.3)' : 'transparent'}; border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:4px; padding:4px 8px; margin-right:5px; cursor:pointer; font-size:0.8rem;">${pLabels[p]}</button>`
     ).join('');
     document.getElementById('chart-summary-' + widgetId).innerHTML = summaryHtml;
 
-    // 5. Chart.js 描画 (★Y軸の表示改善)
     const ctx = document.getElementById('canvas-' + widgetId).getContext('2d');
     if (window['chartInstance_' + widgetId]) window['chartInstance_' + widgetId].destroy();
     window['chartInstance_' + widgetId] = new Chart(ctx, {
       type: 'line', data: { labels: labels, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y>0?'+':''}${ctx.parsed.y.toFixed(2)}%` } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y>0?'+':''}${ctx.parsed.y.toFixed(1)}%` } } },
         scales: {
           x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#ccc', maxTicksLimit: 8 } },
           y: {
-            grace: '10%', // グラフの上下に10%の余白を持たせて見やすくする
-            grid: {
-              // 0%のラインだけを白く太い実線にして強調する
-              color: (c) => c.tick.value === 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.1)',
-              lineWidth: (c) => c.tick.value === 0 ? 2 : 1
-            },
-            ticks: { color: '#ccc', callback: (v) => v.toFixed(1) + '%' } // 小数点1桁に統一して見やすく
+            grace: '10%', 
+            grid: { color: (c) => c.tick.value === 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.1)', lineWidth: (c) => c.tick.value === 0 ? 2 : 1 },
+            ticks: { color: '#ccc', callback: (v) => v.toFixed(1) + '%' }
           }
         }
       }
@@ -401,7 +402,7 @@
   }
   function moveMonth(id, d) { let c = calCache[id]; let m = c.targetMonth+d; let y = c.targetYear; if(m>12){m=1;y++} if(m<1){m=12;y--} loadCalendarData(id,y,m); }
 
-  // 枠管理
+  // 枠管理 (ドラッグ＆ドロップ)
   function initDragEvents() {
     document.querySelectorAll('.widget-drag-handle').forEach(h => { h.onmousedown = (e) => startDrag(e, 'widget'); h.ontouchstart = (e) => startDrag(e, 'widget'); });
     document.querySelectorAll('.drag-handle').forEach(h => { h.onmousedown = (e) => startDrag(e, 'item'); h.ontouchstart = (e) => startDrag(e, 'item'); });
@@ -457,6 +458,7 @@
         header += `<button class="preset-btn" onclick="setWidth('${w.id}',25)">1/4</button><button class="preset-btn" onclick="setWidth('${w.id}',50)">1/2</button><button class="preset-btn" onclick="setWidth('${w.id}',100)">MAX</button>`;
         if(w.type==='bookmark') header += `<button class="ui-btn" onclick="addB('${w.id}')">＋</button>`;
         if(w.type==='rss') header += `<button class="ui-btn" onclick="addR('${w.id}')">＋</button>`;
+        if(w.type==='chart') header += `<button class="ui-btn" onclick="focusStockSearch()" title="銘柄を追加">＋</button>`;
         header += `<button class="ui-btn danger-btn" onclick="deleteWidget('${w.id}')">✕</button></div></div>`;
         
         let content = '';
@@ -534,7 +536,7 @@
     initDataSafely();
     if(appState) {
       document.getElementById('clock-size').value = appState.clock.size; document.getElementById('clock-font').value = appState.clock.font; document.getElementById('headline-url').value = appState.headlineUrl || ''; document.getElementById('headline-speed').value = appState.headlineSpeed || 45;
-      applyClockStyle(); applyHeadlineSpeed(); renderAll(); fetchHeadlineRss(); fetchMarketTicker(); initStockSearch(); updateClock(); setInterval(updateClock, 1000);
+      applyBackground(); applyClockStyle(); applyHeadlineSpeed(); renderAll(); fetchHeadlineRss(); fetchMarketTicker(); initStockSearch(); updateClock(); setInterval(updateClock, 1000);
       window.addEventListener('resize', () => { Object.keys(chartDataCache).forEach(widgetId => { if (window['chartInstance_' + widgetId]) window['chartInstance_' + widgetId].resize(); }); });
     }
   };
