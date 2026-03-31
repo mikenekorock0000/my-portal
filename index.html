@@ -154,6 +154,7 @@
     <button class="ui-btn" onclick="addNewWidget('rss')">＋ RSS</button>
     <button class="ui-btn" onclick="addNewWidget('calendar')">＋ カレンダー</button>
     <button class="ui-btn" onclick="addNewWidget('chart')" style="background:rgba(0,150,136,0.3); border-color:rgba(0,150,136,0.5);">＋ 比較チャート</button>
+    <button class="ui-btn" onclick="addNewWidget('nisa')" style="background:rgba(233,30,99,0.3); border-color:rgba(233,30,99,0.5);">＋ 投資信託 (NISA)</button>
     <button class="ui-btn" onclick="addNewWidget('spacer')">＋ 空白</button>
     <button class="ui-btn primary-btn" onclick="addNewRow()">＋ 段追加</button>
   </div>
@@ -171,6 +172,7 @@
   var rssCache = {};
   var calCache = {};
   var chartDataCache = {};
+  var nisaDataCache = {}; // ★追加：NISA用のキャッシュ
   var resizeData = null;
   var dragEl = null;
   var dragType = null;
@@ -328,12 +330,10 @@
     document.getElementById('headline-content').innerHTML = items.map(i => `<a href="${i.querySelector('link')?.textContent}" target="_blank" class="headline-item"><span class="headline-badge">NEW</span>${i.querySelector('title')?.textContent}</a>`).join('');
   }
 
-  // ★完全修正: 株価ティッカー取得（エラーで画面が壊れないように独立処理）
   async function fetchMarketTicker() {
     const container = document.getElementById('market-ticker');
     if(!appState.markets?.length) { container.innerHTML = ''; return; }
     
-    // 一斉取得ではなく、個別にエラーハンドリングして結果を待つ
     const results = await Promise.all(appState.markets.map(async (m) => {
       try {
         const res = await callGasApi({ action: 'rss', url: `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(m.symbol)}?interval=1d` });
@@ -364,7 +364,110 @@
   
   window.deleteMarketSymbol = function(i) { appState.markets.splice(i,1); save(); fetchMarketTicker(); Object.keys(chartDataCache).forEach(k => { chartDataCache[k].raw = []; }); renderAll(); }
 
-  // ★完全修正: 比較チャートロジック（エラーでグラフ全体が消えないように独立処理）
+  // ==========================================
+  // ★追加：NISA（投資信託）ウィジェット用の処理
+  // ==========================================
+  async function fetchAndRenderNisa(widgetId, code, period) {
+    const priceEl = document.getElementById('nisa-price-' + widgetId);
+    if (!priceEl) return;
+
+    if (!nisaDataCache[widgetId] || nisaDataCache[widgetId].code !== code) {
+      priceEl.textContent = "取得中...";
+      const res = await callGasApi({ action: 'nisa', code: code });
+      if (res.error || !res.currentPrice) {
+        priceEl.textContent = "取得失敗";
+        document.getElementById('nisa-diff-' + widgetId).textContent = "通信エラー、またはファンドコード不正";
+        return;
+      }
+      nisaDataCache[widgetId] = { code: code, data: res, period: period };
+    }
+    renderNisaChartOnly(widgetId, period);
+  }
+
+  window.renderNisaChartOnly = function(widgetId, period) {
+    const cache = nisaDataCache[widgetId];
+    if (!cache) return;
+    cache.period = period;
+    const data = cache.data;
+
+    // ヘッダー情報（最新価格と前日比）の更新
+    document.getElementById('nisa-price-' + widgetId).textContent = data.currentPrice.toLocaleString() + ' 円';
+    const diffEl = document.getElementById('nisa-diff-' + widgetId);
+    diffEl.textContent = (data.diff >= 0 ? '+' : '') + data.diff.toLocaleString() + ' 円';
+    diffEl.className = data.diff >= 0 ? 'diff-up' : 'diff-down';
+
+    // チャートロジック
+    const history = data.history || [];
+    if (history.length === 0) return; // データ配列が空の場合は描画しない
+
+    const now = new Date();
+    let cutoffDate = new Date();
+    if (period === '1W') cutoffDate.setDate(now.getDate() - 7);
+    else if (period === '1M') cutoffDate.setMonth(now.getMonth() - 1);
+    else if (period === '3M') cutoffDate.setMonth(now.getMonth() - 3);
+    else if (period === '6M') cutoffDate.setMonth(now.getMonth() - 6);
+    else if (period === 'YTD') cutoffDate = new Date(now.getFullYear(), 0, 1);
+    else if (period === '1Y') cutoffDate.setFullYear(now.getFullYear() - 1);
+    const cutoff = cutoffDate.getTime();
+
+    // 指定期間で絞り込み
+    const filtered = history.filter(d => d.date >= cutoff).sort((a,b) => a.date - b.date);
+    if (filtered.length === 0) return;
+
+    // 起点(0%)を基準日とする
+    const basePrice = filtered[0].price;
+    const labels = filtered.map(d => new Date(d.date).toLocaleDateString('ja-JP', {month:'short', day:'numeric'}));
+    const rates = filtered.map(d => ((d.price - basePrice) / basePrice) * 100);
+
+    // 期間選択ボタンの更新
+    const pLabels = {'1W':'1週間', '1M':'1ヶ月', '3M':'3ヶ月', '6M':'半年', 'YTD':'年初来', '1Y':'1年'};
+    document.getElementById('nisa-controls-' + widgetId).innerHTML = Object.keys(pLabels).map(p => 
+      `<button onclick="window.renderNisaChartOnly('${widgetId}', '${p}')" style="background:${p===period ? 'rgba(233,30,99,0.3)' : 'transparent'}; border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:4px; padding:4px 8px; margin-right:5px; cursor:pointer; font-size:0.8rem;">${pLabels[p]}</button>`
+    ).join('');
+
+    // Chart.jsで描画
+    const ctx = document.getElementById('nisa-canvas-' + widgetId).getContext('2d');
+    if (window['nisaChartInstance_' + widgetId]) window['nisaChartInstance_' + widgetId].destroy();
+    window['nisaChartInstance_' + widgetId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '高騰率 (%)',
+          data: rates,
+          borderColor: '#e91e63',
+          backgroundColor: 'rgba(233, 30, 99, 0.15)',
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          fill: true,
+          tension: 0.15
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y>0?'+':''}${ctx.parsed.y.toFixed(2)}%` } } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#ccc', maxTicksLimit: 6 } },
+          y: {
+            grace: '5%', 
+            grid: { color: (c) => c.tick.value === 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.1)', lineWidth: (c) => c.tick.value === 0 ? 2 : 1 },
+            ticks: { color: '#ccc', callback: (v) => v.toFixed(1) + '%' }
+          }
+        }
+      }
+    });
+  };
+
+  window.updateNisaCode = function(id) {
+    const val = document.getElementById('nisa-code-input-'+id).value;
+    findWidget(id).nisaCode = val;
+    save();
+    delete nisaDataCache[id]; // キャッシュクリア
+    alert('保存しました。編集モードを完了すると新しいチャートを取得します。');
+  };
+  // ==========================================
+
   async function fetchAndRenderChart(widgetId, period) {
     const sumContainer = document.getElementById('chart-summary-' + widgetId);
     if (!appState.markets || appState.markets.length === 0) {
@@ -544,7 +647,8 @@
         const inner = document.createElement('div'); inner.className = 'widget glass';
         if(w.type==='spacer' && !isEditMode) inner.style.visibility = 'hidden';
         
-        let icon = w.type==='bookmark'?'📌':w.type==='rss'?'📰':w.type==='calendar'?'📅':'📈';
+        // ★追加：NISA用のアイコン
+        let icon = w.type==='bookmark'?'📌':w.type==='rss'?'📰':w.type==='calendar'?'📅':w.type==='nisa'?'🏦':'📈';
         let header = `<div class="widget-header"><div style="display:flex;align-items:center;"><div class="widget-drag-handle">✥</div><h2>${icon} ${w.title || ''}</h2></div><div class="edit-only" style="gap:5px;">`;
         header += `<button class="preset-btn" onclick="setWidth('${w.id}',25)">1/4</button><button class="preset-btn" onclick="setWidth('${w.id}',50)">1/2</button><button class="preset-btn" onclick="setWidth('${w.id}',100)">MAX</button>`;
         if(w.type==='bookmark') header += `<button class="ui-btn" onclick="addB('${w.id}')">＋</button>`;
@@ -558,6 +662,24 @@
         else if(w.type==='calendar') content = `<div id="cal-${w.id}"></div>`;
         else if(w.type==='chart') content = `<div style="display:flex; flex-direction:column; height:100%;"><div id="chart-controls-${w.id}" style="margin-bottom:10px;"></div><div style="flex-grow:1; position:relative; min-height:250px;"><canvas id="canvas-${w.id}"></canvas></div><div id="chart-summary-${w.id}" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:0.85rem;"></div></div>`;
         
+        // ★追加：NISA用の描画コンテンツ
+        else if(w.type==='nisa') {
+          let code = w.nisaCode || '0331418A'; // デフォルトはオルカン
+          let editHtml = isEditMode ? `<div style="display:flex; gap:5px; align-items:center; margin-top:10px; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px;"><input type="text" id="nisa-code-input-${w.id}" class="edit-input" value="${code}" placeholder="みんかぶのファンドコード" style="flex-grow:1; font-size:0.85rem;"><button class="ui-btn" onclick="updateNisaCode('${w.id}')">コード保存</button></div>` : '';
+          content = `
+          <div style="display:flex; flex-direction:column; height:100%;">
+            <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+              <h2 id="nisa-price-${w.id}" style="margin:0; font-size:2.4rem; letter-spacing:1px; text-shadow:0 2px 4px rgba(0,0,0,0.4);">---</h2>
+              <span id="nisa-diff-${w.id}" style="font-size:1.1rem; font-weight:bold;">---</span>
+            </div>
+            <div id="nisa-controls-${w.id}" style="margin-bottom:10px;"></div>
+            <div style="flex-grow:1; position:relative; min-height:220px;">
+              <canvas id="nisa-canvas-${w.id}"></canvas>
+            </div>
+            ${editHtml}
+          </div>`;
+        }
+
         inner.innerHTML = header + content; wrap.appendChild(inner);
         if(isEditMode && wIdx < row.length - 1) {
           const resizer = document.createElement('div'); resizer.className = 'widget-resizer';
@@ -570,6 +692,8 @@
           if(w.type==='calendar') loadCalendarData(w.id, new Date().getFullYear(), new Date().getMonth()+1);
           if(w.type==='rss') fetchRssWidget(w.id, w.urls || []);
           if(w.type==='chart') fetchAndRenderChart(w.id, 'YTD');
+          // ★追加：NISAデータのフェッチ
+          if(w.type==='nisa') fetchAndRenderNisa(w.id, w.nisaCode || '0331418A', '1Y');
         }
       });
       container.appendChild(rowDiv);
@@ -642,7 +766,12 @@
     if(appState) {
       document.getElementById('clock-size').value = appState.clock.size; document.getElementById('clock-font').value = appState.clock.font; document.getElementById('headline-url').value = appState.headlineUrl || ''; document.getElementById('headline-speed').value = appState.headlineSpeed || 45;
       applyBackground(); applyClockStyle(); applyHeadlineSpeed(); renderAll(); fetchHeadlineRss(); fetchMarketTicker(); initStockSearch(); updateClock(); setInterval(updateClock, 1000);
-      window.addEventListener('resize', () => { Object.keys(chartDataCache).forEach(widgetId => { if (window['chartInstance_' + widgetId]) window['chartInstance_' + widgetId].resize(); }); });
+      
+      // ★追加：リサイズイベントでNISAチャートもリサイズ対応させる
+      window.addEventListener('resize', () => { 
+        Object.keys(chartDataCache).forEach(widgetId => { if (window['chartInstance_' + widgetId]) window['chartInstance_' + widgetId].resize(); }); 
+        Object.keys(nisaDataCache).forEach(widgetId => { if (window['nisaChartInstance_' + widgetId]) window['nisaChartInstance_' + widgetId].resize(); }); 
+      });
     }
   };
 </script>
