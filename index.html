@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>My Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* =========================================
+       基本スタイル
+       ========================================= */
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-size: cover; background-position: center; background-attachment: fixed;
+      transition: background-image 0.5s ease-in-out;
+      color: #ffffff; text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.6);
+      background-color: #2c3e50; overscroll-behavior-y: none; 
+    }
+    /* ★修正: max-widthを1200pxから1600pxに拡張し、左右を広く使えるようにしました */
+    .container { max-width: 1600px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+    
+    .glass {
+      background: rgba(20, 20, 20, 0.45); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px; padding: 20px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    }
+    
+    /* =========================================
+       ヘッダー周り（時計・株価・ヘッドライン）
+       ========================================= */
+    header { display: flex; flex-direction: column; gap: 15px; }
+    .header-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; }
+    
+    #clock-widget h1 { margin: 0; font-weight: 300; letter-spacing: 2px; line-height: 1.1; transition: all 0.2s;}
+    #clock-widget p { margin: 5px 0 0 0; font-size: 1rem; color: rgba(255,255,255,0.8); }
+    
+    .market-ticker-container { 
+      display: flex; gap: 12px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; 
+      border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 5px;
+    }
+    .market-ticker-container::-webkit-scrollbar { display: none; }
+    .market-item { display: flex; align-items: baseline; gap: 6px; background: rgba(0,0,0,0.25); padding: 6px 14px; border-radius: 8px; white-space: nowrap; }
+    .market-label { font-size: 0.85rem; color: #ccc; }
+    .market-price { font-size: 1rem; font-weight: bold; }
+    .market-diff { font-size: 0.85rem; font-weight: 500;}
+    .diff-up { color: #ff8a80; }
+    .diff-down { color: #82c8ff; }
+
+    .headline-ticker {
+      width: 100%; overflow: hidden; white-space: nowrap; background: rgba(0,0,0,0.2);
+      border-radius: 8px; padding: 10px 0; position: relative; display: flex; align-items: center;
+    }
+    /* ★修正: animation-durationはJS側で動的に制御するため、初期値を設定 */
+    .headline-content { display: inline-block; padding-left: 100%; animation: marquee 45s linear infinite; }
+    .headline-ticker:hover .headline-content { animation-play-state: paused; }
+    .headline-item { margin-right: 50px; color: #fff; text-decoration: none; font-size: 0.95rem; }
+    .headline-item:hover { color: #82c8ff; text-decoration: underline; }
+    .headline-badge { background: #E50914; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 8px; font-weight: bold; }
+    
+    @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
+
+    /* =========================================
+       検索窓 UI & Gemini連携
+       ========================================= */
+    .search-container {
+      display: flex; flex-direction: column; align-items: center; margin-top: 10px; margin-bottom: 5px; width: 100%;
+    }
+    .search-bar {
+      display: flex; gap: 10px; width: 100%; max-width: 750px; position: relative;
+    }
+    .search-input-wrapper {
+      display: flex; flex-grow: 1; position: relative;
+    }
+    .search-input {
+      flex-grow: 1; padding: 12px 20px; border-radius: 25px; border: 2px solid transparent; font-size: 1.05rem; 
+      padding-right: 45px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); outline: none; color: #333; text-shadow: none; transition: 0.3s;
+    }
+    .search-submit-btn {
+      position: absolute; right: 5px; top: 5px; bottom: 5px; background: transparent; 
+      border: none; font-size: 1.2rem; color: #555; cursor: pointer; padding: 0 10px; text-shadow: none;
+    }
+    .gemini-btn {
+      border-radius: 25px; padding: 0 20px; display: flex; align-items: center; justify-content: center; 
+      background: linear-gradient(135deg, #1a73e8, #8ab4f8); border: 2px solid transparent; font-weight: bold; 
+      font-size: 1rem; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; transition: 0.2s; white-space: nowrap;
+    }
+    .gemini-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .gemini-btn.active {
+      box-shadow: inset 0 3px 8px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.8); background: linear-gradient(135deg, #0d47a1, #1976d2);
+    }
+    .gemini-options-panel {
+      display: none; justify-content: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; max-width: 750px; width: 100%;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .gemini-opt-label {
+      background: rgba(0,0,0,0.4); padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; 
+      cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s; border: 1px solid rgba(255,255,255,0.1);
+    }
+    .gemini-opt-label:hover { background: rgba(0,0,0,0.6); border-color: rgba(255,255,255,0.3); }
+    .gemini-opt-label input[type="checkbox"] { accent-color: #8ab4f8; transform: scale(1.1); }
+
+    /* =========================================
+       共通UI・編集モード制御
+       ========================================= */
+    input[type="text"].edit-input, select { padding: 8px 12px; border-radius: 8px; border: none; background: rgba(255, 255, 255, 0.9); outline: none; color: #333; text-shadow: none; }
+    input[type="range"] { accent-color: #82c8ff; }
+    button.ui-btn { padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255, 255, 255, 0.15); color: white; cursor: pointer; transition: 0.2s; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+    button.ui-btn:hover { background: rgba(255, 255, 255, 0.3); }
+    .danger-btn { background: rgba(255, 50, 50, 0.3); border-color: rgba(255, 50, 50, 0.5); }
+    .danger-btn:hover { background: rgba(255, 50, 50, 0.6); }
+    .primary-btn { background: rgba(0, 122, 255, 0.6); border-color: rgba(0, 122, 255, 0.8); }
+    
+    .edit-only, .edit-only-inline, .edit-only-block { display: none !important; } 
+    body.is-edit-mode .edit-only { display: flex !important; } 
+    body.is-edit-mode .edit-only-inline { display: inline-block !important; }
+    body.is-edit-mode .edit-only-block { display: block !important; }
+
+    /* =========================================
+       段（Row）レイアウトとスプリッター
+       ========================================= */
+    #widget-container { display: flex; flex-direction: column; gap: 15px; }
+    .dashboard-row { display: flex; flex-wrap: nowrap; width: 100%; align-items: stretch; gap: 15px; transition: padding 0.3s, background 0.3s; }
+    body.is-edit-mode .dashboard-row { padding: 15px; background: rgba(0, 0, 0, 0.15); border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 15px; }
+    body.is-edit-mode .dashboard-row:empty::after { content: "＋ ここに枠を追加してください"; display: flex; align-items: center; justify-content: center; width: 100%; height: 80px; color: rgba(255,255,255,0.4); font-style: italic; }
+    
+    .widget-wrapper { display: flex; flex-direction: column; position: relative; }
+    .widget { flex-grow: 1; display: flex; flex-direction: column; margin: 0; }
+    .widget.spacer-edit { border: 2px dashed rgba(255,255,255,0.4); background: rgba(0,0,0,0.2); justify-content: center; align-items: center; box-shadow: none; backdrop-filter: none; }
+    .widget.spacer-view { background: transparent; border: none; box-shadow: none; backdrop-filter: none; pointer-events: none; }
+
+    @media (max-width: 768px) { .dashboard-row { flex-direction: column; } .widget-wrapper { width: 100% !important; } .widget-resizer { display: none !important; } }
+    .widget-wrapper.dragging-widget { opacity: 0.4; transform: scale(0.95); z-index: 100; pointer-events: none;}
+    
+    .widget-resizer { position: absolute; right: -12px; top: 10%; bottom: 10%; width: 10px; cursor: col-resize; z-index: 50; display: flex; align-items: center; justify-content: center; touch-action: none; }
+    .widget-resizer::after { content: ""; width: 4px; height: 30px; background: rgba(255,255,255,0.3); border-radius: 2px; transition: 0.2s; }
+    .widget-resizer:hover::after, .widget-resizer.is-resizing::after { background: #82c8ff; height: 100%; }
+    body.is-resizing * { cursor: col-resize !important; user-select: none; }
+
+    /* ウィジェット内部UI */
+    .widget-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; margin-bottom: 15px; }
+    .widget-header h2 { margin: 0; font-size: 1.1rem; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+    .widget-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end;}
+    .preset-btn { padding: 4px 8px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; color: white; cursor: pointer; }
+    .preset-btn:hover { background: rgba(255,255,255,0.2); }
+    .widget-drag-handle { cursor: grab; padding-right: 10px; font-size: 1.2rem; color: #82c8ff; touch-action: none; display: none; }
+    body.is-edit-mode .widget-drag-handle { display: block; }
+    .widget-drag-handle:active { cursor: grabbing; color: white; }
+    body:not(.is-edit-mode) .widget-header.no-title { display: none; } 
+    body.is-edit-mode .widget-header.no-title h2 { color: rgba(255,255,255,0.4); font-style: italic; }
+    
+    ul { list-style: none; padding: 0; margin: 0; flex-grow: 1;}
+    li { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.05); transition: background 0.2s; position: relative; }
+    li:hover { background: rgba(255,255,255,0.1); }
+    .item-content { flex-grow: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: flex; align-items: center; gap: 8px; }
+    .item-content a { color: #ffffff; text-decoration: none; }
+    .item-content a:hover { text-decoration: underline; }
+    .drag-handle { cursor: grab; padding: 0 10px 0 0; color: rgba(255,255,255,0.5); font-size: 1.5rem; user-select: none; line-height: 1; touch-action: none; }
+    .drag-handle:active { cursor: grabbing; color: white; }
+    li.dragging { opacity: 0.5; background: rgba(255,255,255,0.2); transform: scale(1.02); z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.3); pointer-events: none; }
+    
+    .rss-meta { font-size: 0.8rem; color: rgba(255,255,255,0.6); margin-top: -5px; margin-bottom: 12px; line-height: 1.4; }
+    .rss-source-badge { font-size: 0.7rem; color: #82c8ff; border: 1px solid rgba(130,200,255,0.4); padding: 1px 4px; border-radius: 4px; margin-right: 5px; white-space: nowrap; }
+    .rss-date { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-left: 8px; white-space: nowrap; }
+    .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
+
+    /* =========================================
+       カレンダーUI
+       ========================================= */
+    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; }
+    .cal-header button { background: rgba(255,255,255,0.2); border: none; color: white; padding: 4px 15px; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+    .cal-header button:hover { background: rgba(255,255,255,0.3); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; overflow: hidden; }
+    .cal-day-header { text-align: center; font-size: 0.8rem; padding: 6px 0; background: rgba(0,0,0,0.4); font-weight: bold; }
+    .cal-cell { min-height: 80px; background: rgba(0,0,0,0.25); padding: 4px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+    .cal-cell.empty { background: rgba(0,0,0,0.1); }
+    .cal-date { font-size: 0.85rem; text-align: right; margin-bottom: 4px; color: #eee; }
+    /* ★修正: 色を淡くしても文字が読みやすいように、シャドウを外しフォントを少し太く */
+    .cal-event { 
+      font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; 
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+      color: #fff; cursor: default; font-weight: 500; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+
+<div id="error-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;">
+  <h2>⚠️ プログラムエラーが発生しました</h2>
+  <p id="error-msg" style="color:#ff8a80; font-size:0.9rem; margin-bottom: 20px;"></p>
+  <button onclick="localStorage.removeItem('portal_state'); location.reload();" style="margin-top:20px; padding:15px 30px; font-size:1.1rem; background:#E50914; color:white; border:none; border-radius:8px; cursor:pointer;">データを全消去して復旧</button>
+</div>
+
+<div class="container" id="main-app">
+  <header class="glass">
+    <div class="header-top">
+      <div id="clock-widget" style="display:flex; align-items: center; gap: 15px; flex-shrink: 0;">
+        <div>
+          <h1 id="time">00:00</h1>
+          <p id="date">--</p>
+        </div>
+        
+        <div class="edit-only-block" style="background: rgba(0,0,0,0.3); padding: 10px 15px; border-radius: 10px;">
+          <div style="font-size: 0.8rem; color: #ccc; margin-bottom: 5px;">⌚ 時計デザイン</div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="font-size: 0.8rem;">サイズ: <input type="range" id="clock-size" min="1.5" max="5.0" step="0.1" value="2.2" oninput="applyClockStyle()" onchange="saveHeaderSettings()" style="width:100px;"></label>
+            <label style="font-size: 0.8rem;">フォント: 
+              <select id="clock-font" onchange="applyClockStyle(); saveHeaderSettings();" style="font-size: 0.8rem; padding: 4px;">
+                <option value="system-ui, sans-serif">標準</option>
+                <option value="'Noto Serif JP', serif">明朝体</option>
+                <option value="'Courier New', monospace">等幅</option>
+                <option value="'Impact', sans-serif">インパクト</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div style="flex-grow: 1; min-width: 250px; overflow: hidden; display: flex; flex-direction: column; justify-content: center;">
+        <div id="market-ticker" class="market-ticker-container"></div>
+        <div class="edit-only-block" style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-top: 10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+            <span style="font-size:0.8rem; color:#ddd;">📈 株価・為替シンボル</span>
+            <button class="ui-btn" onclick="addMarketSymbol()" style="font-size:0.7rem; padding:4px 8px;">＋追加</button>
+          </div>
+          <ul id="market-edit-list" style="display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:0;"></ul>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex-shrink: 0;">
+        <div class="edit-only" style="gap: 5px;">
+          <input type="text" class="edit-input" id="bg-url" placeholder="背景画像URL" style="width: 120px; font-size: 0.8rem;">
+          <button class="ui-btn" onclick="changeBackground()" style="font-size: 0.8rem;">適用</button>
+        </div>
+        <button id="edit-toggle-btn" class="ui-btn primary-btn" onclick="toggleEditMode()">⚙️ 編集モード</button>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:5px; margin-top: 10px;">
+      <div class="headline-ticker">
+        <div class="headline-content" id="headline-content">ニュースを読み込み中...</div>
+      </div>
+      <div class="edit-only" style="gap:10px; align-items:center; flex-wrap: wrap; background: rgba(0,0,0,0.2); padding: 8px 15px; border-radius: 10px;">
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <span style="font-size:0.8rem; color:#aaa;">ヘッドラインRSS:</span>
+          <input type="text" class="edit-input" id="headline-url" style="width: 300px; font-size:0.8rem;">
+        </div>
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <span style="font-size:0.8rem; color:#aaa;">流れる速度:</span>
+          <input type="range" id="headline-speed" min="10" max="120" step="1" style="width: 100px;" oninput="applyHeadlineSpeed()" onchange="saveHeaderSettings()">
+          <span id="headline-speed-val" style="font-size:0.8rem; color:#aaa; width: 35px; text-align: right;">45s</span>
+        </div>
+        <button class="ui-btn" onclick="saveHeaderSettings(); fetchHeadlineRss();" style="font-size:0.8rem;">更新</button>
+      </div>
+    </div>
+
+    <div class="search-container">
+      <div class="search-bar">
+        <form onsubmit="handleSearchSubmit(event)" class="search-input-wrapper">
+          <input type="text" id="main-search-input" class="search-input" placeholder="Google または Gemini で検索..." autocomplete="off">
+          <button type="submit" id="main-search-btn" class="search-submit-btn" title="検索">🔍</button>
+        </form>
+        <button type="button" id="gemini-toggle-btn" class="gemini-btn" onclick="toggleGeminiMode()" title="Geminiの拡張オプションを開く">
+          ✨ Gemini
+        </button>
+      </div>
+      
+      <div id="gemini-options-panel" class="gemini-options-panel">
+        <label class="gemini-opt-label">
+          <input type="checkbox" id="gem-opt-think"> 🧠 思考プロセスを開示
+        </label>
+        <label class="gemini-opt-label">
+          <input type="checkbox" id="gem-opt-prog"> 💻 プログラマ視点（コード例）
+        </label>
+        <label class="gemini-opt-label">
+          <input type="checkbox" id="gem-opt-step"> 📋 ステップバイステップ
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main id="widget-container"></main>
+
+  <div class="edit-only" style="justify-content: center; margin-top: 20px; gap: 15px; flex-wrap: wrap;">
+    <button class="ui-btn" onclick="addNewWidget('bookmark')">＋ ブックマーク枠</button>
+    <button class="ui-btn" onclick="addNewWidget('rss')">＋ RSSリーダー</button>
+    <button class="ui-btn" onclick="addNewWidget('calendar')">＋ カレンダー枠</button>
+    <button class="ui-btn" onclick="addNewWidget('spacer')" style="border-style: dashed;">＋ 空白枠</button>
+    <span style="color:rgba(255,255,255,0.3);">|</span>
+    <button class="ui-btn primary-btn" onclick="addNewRow()">＋ 新しい段を追加</button>
+    <button class="ui-btn danger-btn" onclick="hardResetData()">全データ初期化</button>
+  </div>
+</div>
+
+<script>
+  window.onerror = function(msg, url, line) {
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('error-overlay').style.display = 'flex';
+    document.getElementById('error-msg').textContent = msg + ' (行: ' + line + ')';
+    return true;
+  };
+
+  var appState = null;
+  var rssDataCache = {};
+  var calendarDataCache = {};
+  var isEditMode = false;
+  var isGeminiMode = false;
+  var resizeData = null;
+  var dragEl = null;
+  var dragType = null;
+  var sourceId = null;
+
+  // ★修正: headlineSpeedの初期値(45)をdefaultStateに追加
+  var defaultState = {
+    bgUrl: 'https://images.unsplash.com/photo-1506744626753-dba37c2de9d5?auto=format&fit=crop&w=1920&q=80',
+    clock: { size: '2.2', font: 'system-ui, sans-serif' },
+    headlineUrl: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml',
+    headlineSpeed: 45, 
+    markets: [
+      { symbol: '^GSPC', label: 'S&P 500' },
+      { symbol: '^N225', label: '日経平均' },
+      { symbol: 'USDJPY=X', label: 'USD/JPY' }
+    ],
+    rows: [
+      [
+        { id: 'w1', type: 'bookmark', title: 'Daily', widthPct: 50, items: [{ title: 'Google', url: 'https://google.com' }] },
+        { id: 'w2', type: 'rss', title: 'News', widthPct: 50, urls: [{ url: 'https://news.yahoo.co.jp/rss/topics/it.xml', name: 'Yahoo! IT' }] }
+      ]
+    ]
+  };
+
+  // ==========================================
+  // ユーティリティ関数
+  // ==========================================
+  // ★追加: カラーコードをパステル調（RGBAの半透明）に変換する関数
+  function hexToRgba(hex, alpha) {
+    var r = 0, g = 0, b = 0;
+    if (!hex) return 'rgba(100,100,100,' + alpha + ')';
+    if (hex.length === 4) {
+      r = parseInt(hex[1] + hex[1], 16); g = parseInt(hex[2] + hex[2], 16); b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+      r = parseInt(hex.substring(1, 3), 16); g = parseInt(hex.substring(3, 5), 16); b = parseInt(hex.substring(5, 7), 16);
+    }
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
+  // ==========================================
+  // 検索・Geminiプロンプト合成機能
+  // ==========================================
+  function toggleGeminiMode() {
+    isGeminiMode = !isGeminiMode;
+    var panel = document.getElementById('gemini-options-panel');
+    var btn = document.getElementById('gemini-toggle-btn');
+    var input = document.getElementById('main-search-input');
+    var searchBtn = document.getElementById('main-search-btn');
+
+    if (isGeminiMode) {
+      panel.style.display = 'flex';
+      btn.classList.add('active');
+      input.placeholder = 'Geminiへの指示・質問を入力...';
+      input.style.border = '2px solid #8ab4f8';
+      searchBtn.textContent = '✨';
+      input.focus();
+    } else {
+      panel.style.display = 'none';
+      btn.classList.remove('active');
+      input.placeholder = 'Google または Gemini で検索...';
+      input.style.border = '2px solid transparent';
+      searchBtn.textContent = '🔍';
+    }
+  }
+
+  function handleSearchSubmit(e) {
+    e.preventDefault();
+    var query = document.getElementById('main-search-input').value.trim();
+    if (!query) return;
+
+    if (isGeminiMode) {
+      var prefix = ""; var opts = [];
+      if (document.getElementById('gem-opt-think').checked) { opts.push("回答する前に、あなたの思考プロセスを<thought>タグ等を用いて明確に出力し、深く検討してください。"); }
+      if (document.getElementById('gem-opt-prog').checked) { opts.push("プログラマの視点で、技術的な根拠や具体的で実行可能なコード例を含めて回答してください。"); }
+      if (document.getElementById('gem-opt-step').checked) { opts.push("解決策や手順をステップバイステップで分かりやすく提示してください。"); }
+      if (opts.length > 0) { prefix = "【システム指示】\n以下の条件を厳守して回答してください。\n- " + opts.join("\n- ") + "\n\n"; }
+      var finalQuery = prefix ? (prefix + "【ユーザーからの入力】\n" + query) : query;
+      window.open('https://gemini.google.com/app?q=' + encodeURIComponent(finalQuery), '_blank');
+    } else {
+      window.open('https://www.google.com/search?q=' + encodeURIComponent(query), '_blank');
+    }
+  }
+
+  // ==========================================
+  // データ初期化・管理
+  // ==========================================
+  function initDataSafely() {
+    var savedStr = localStorage.getItem('portal_state');
+    if (savedStr) { try { appState = JSON.parse(savedStr); } catch (e) { appState = null; } }
+    if (!appState || typeof appState !== 'object') { appState = JSON.parse(JSON.stringify(defaultState)); }
+
+    if (!appState.clock) appState.clock = defaultState.clock;
+    if (!appState.headlineUrl) appState.headlineUrl = defaultState.headlineUrl;
+    if (!appState.headlineSpeed) appState.headlineSpeed = defaultState.headlineSpeed; // ★追加
+    if (!appState.markets) appState.markets = defaultState.markets;
+
+    if (!Array.isArray(appState.rows)) { appState.rows = JSON.parse(JSON.stringify(defaultState.rows)); }
+    appState.rows = appState.rows.map(function(row) {
+      if (!Array.isArray(row)) return []; return row.filter(function(w) { return w && w.id && w.type !== 'market'; });
+    }).filter(function(row) { return row.length > 0; });
+    if (appState.rows.length === 0) { appState.rows.push([]); }
+    
+    appState.rows.forEach(function(row) {
+      var total = row.reduce(function(sum, w) { return sum + (w.widthPct || 33); }, 0);
+      if (total === 0) total = 1;
+      row.forEach(function(w) { w.widthPct = ((w.widthPct || 33) / total) * 100; });
+    });
+
+    localStorage.setItem('portal_state', JSON.stringify(appState));
+  }
+
+  function hardResetData() {
+    if (confirm('完全に初期状態に戻しますか？すべてのデータが消去されます。')) { localStorage.removeItem('portal_state'); location.reload(); }
+  }
+
+  function findWidgetById(id) {
+    for (var i = 0; i < appState.rows.length; i++) {
+      var row = appState.rows[i];
+      for (var j = 0; j < row.length; j++) { if (row[j].id === id) return row[j]; }
+    } return null;
+  }
+  
+  function saveAndRender() { localStorage.setItem('portal_state', JSON.stringify(appState)); renderAll(); }
+
+  // ==========================================
+  // ヘッダー・株価・ニュース
+  // ==========================================
+  function initHeaderSettings() {
+    document.getElementById('clock-size').value = appState.clock.size;
+    document.getElementById('clock-font').value = appState.clock.font;
+    document.getElementById('headline-url').value = appState.headlineUrl;
+    document.getElementById('headline-speed').value = appState.headlineSpeed; // ★追加
+    
+    applyClockStyle(); 
+    applyHeadlineSpeed(); // ★追加
+    fetchHeadlineRss(); 
+    fetchMarketTicker();
+  }
+
+  function applyClockStyle() {
+    var timeEl = document.getElementById('time');
+    timeEl.style.fontSize = document.getElementById('clock-size').value + 'rem';
+    timeEl.style.fontFamily = document.getElementById('clock-font').value;
+  }
+
+  // ★追加: スライダーに応じてアニメーション速度を変更する
+  function applyHeadlineSpeed() {
+    var speed = document.getElementById('headline-speed').value;
+    document.getElementById('headline-speed-val').textContent = speed + 's';
+    var content = document.getElementById('headline-content');
+    if (content) content.style.animationDuration = speed + 's';
+  }
+
+  function saveHeaderSettings() {
+    appState.clock.size = document.getElementById('clock-size').value;
+    appState.clock.font = document.getElementById('clock-font').value;
+    appState.headlineUrl = document.getElementById('headline-url').value;
+    appState.headlineSpeed = document.getElementById('headline-speed').value; // ★追加
+    localStorage.setItem('portal_state', JSON.stringify(appState));
+  }
+
+  function fetchHeadlineRss() {
+    var container = document.getElementById('headline-content');
+    container.innerHTML = 'ニュースを読み込み中...';
+    if (!appState.headlineUrl) { container.innerHTML = 'ヘッドラインのURLがありません'; return; }
+    
+    google.script.run.withSuccessHandler(function(res) {
+      if (res.indexOf('<error>') !== -1) { container.innerHTML = '取得失敗'; return; }
+      try {
+        var parser = new DOMParser(); var xmlDoc = parser.parseFromString(res, 'text/xml');
+        var items = Array.from(xmlDoc.querySelectorAll('item')).slice(0, 15);
+        var htmlStr = '';
+        items.forEach(function(item) {
+          var title = item.querySelector('title') ? item.querySelector('title').textContent : '無題';
+          var link = item.querySelector('link') ? item.querySelector('link').textContent : '#';
+          htmlStr += '<a href="' + link + '" target="_blank" class="headline-item"><span class="headline-badge">NEW</span>' + title + '</a>';
+        });
+        container.innerHTML = htmlStr;
+      } catch(e) { container.innerHTML = '解析エラー'; }
+    }).withFailureHandler(function() { container.innerHTML = '通信エラー'; }).fetchRss(appState.headlineUrl);
+  }
+
+  function fetchMarketTicker() {
+    var container = document.getElementById('market-ticker');
+    if (!appState.markets || appState.markets.length === 0) { container.innerHTML = '<span style="color:#aaa; font-size:0.8rem;">銘柄なし</span>'; return; }
+    container.innerHTML = '<span style="color:#aaa; font-size:0.8rem;">データ取得中...</span>';
+
+    var fetchPromises = appState.markets.map(function(market) {
+      return new Promise(function(resolve) {
+        var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(market.symbol) + '?interval=1d';
+        google.script.run.withSuccessHandler(function(res) { resolve({ market: market, data: res }); }).withFailureHandler(function(err) { resolve({ market: market, error: err }); }).fetchRss(url);
+      });
+    });
+
+    Promise.all(fetchPromises).then(function(results) {
+      var htmlStr = '';
+      results.forEach(function(res) {
+        if (res.error || res.data.indexOf('<error>') !== -1) { htmlStr += '<div class="market-item"><span class="market-label">' + res.market.label + '</span><span style="color:#aaa; font-size:0.8rem;">取得失敗</span></div>'; return; }
+        try {
+          var json = JSON.parse(res.data); var meta = json.chart.result[0].meta;
+          var price = meta.regularMarketPrice; 
+          var prev = meta.previousClose || meta.chartPreviousClose || price;
+          
+          var diff = price - prev; var isUp = diff >= 0;
+          var sign = isUp ? '△' : '▼'; var colorCls = isUp ? 'diff-up' : 'diff-down';
+          var formatPrice = function(p) { return (typeof p !== 'number' || isNaN(p)) ? '0.00' : (p > 1000 ? Math.round(p).toLocaleString() : p.toFixed(2)); };
+          htmlStr += '<div class="market-item"><span class="market-label">' + res.market.label + '</span><span class="market-price">' + formatPrice(price) + '</span><span class="market-diff ' + colorCls + '">(' + sign + formatPrice(Math.abs(diff)) + ')</span></div>';
+        } catch(e) { htmlStr += '<div class="market-item"><span class="market-label">' + res.market.label + '</span><span style="color:#aaa; font-size:0.8rem;">エラー</span></div>'; }
+      });
+      container.innerHTML = htmlStr; renderMarketEditList(); 
+    });
+  }
+
+  function renderMarketEditList() {
+    var listContainer = document.getElementById('market-edit-list'); var htmlStr = '';
+    appState.markets.forEach(function(m, i) {
+      htmlStr += '<li style="list-style:none; display:flex; gap:5px; align-items:center; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:6px; font-size:0.8rem;"><span style="color:#82c8ff;">' + m.symbol + '</span> ' + m.label + '<button class="danger-btn ui-btn" onclick="deleteMarketSymbol(' + i + ')" style="padding:2px 6px; font-size:0.7rem; margin-left:5px;">✕</button></li>';
+    });
+    listContainer.innerHTML = htmlStr;
+  }
+  function addMarketSymbol() {
+    var symbol = prompt('① Yahoo Financeのシンボルを入力\n(例: ^GSPC, ^N225, USDJPY=X, AAPL)'); if (!symbol) return;
+    var label = prompt('② 表示名を入力 (例: S&P500)'); if (!label) return;
+    appState.markets.push({ symbol: symbol.toUpperCase(), label: label }); saveAndRender(); fetchMarketTicker();
+  }
+  function deleteMarketSymbol(index) { if (confirm('削除しますか？')) { appState.markets.splice(index, 1); saveAndRender(); fetchMarketTicker(); } }
+
+  // ==========================================
+  // UI・枠管理
+  // ==========================================
+  function toggleEditMode() {
+    isEditMode = !isEditMode; var btn = document.getElementById('edit-toggle-btn');
+    if (isEditMode) { document.body.classList.add('is-edit-mode'); btn.textContent = '完了'; btn.classList.remove('primary-btn'); } 
+    else { document.body.classList.remove('is-edit-mode'); btn.textContent = '⚙️ 編集モード'; btn.classList.add('primary-btn'); appState.rows = appState.rows.filter(function(row) { return row.length > 0; }); if (appState.rows.length === 0) appState.rows.push([]); rssDataCache = {}; saveAndRender(); }
+    renderAll(); 
+  }
+
+  function applyBackground() { if (appState.bgUrl) { document.body.style.backgroundImage = "url('" + appState.bgUrl + "')"; document.getElementById('bg-url').value = appState.bgUrl; } }
+  function changeBackground() { appState.bgUrl = document.getElementById('bg-url').value; applyBackground(); saveAndRender(); }
+  function generateId() { return 'w_' + Math.random().toString(36).substr(2, 9); }
+  function addNewRow() { appState.rows.push([]); saveAndRender(); }
+
+  function setWidgetWidthPreset(widgetId, pct) {
+    var targetRow = null; var targetWidget = null;
+    for (var i = 0; i < appState.rows.length; i++) { targetWidget = appState.rows[i].find(function(w) { return w.id === widgetId; }); if (targetWidget) { targetRow = appState.rows[i]; break; } }
+    if (!targetRow) return; targetWidget.widthPct = pct; var others = targetRow.filter(function(w) { return w.id !== widgetId; });
+    if (others.length > 0) { var remainingPct = 100 - pct; var othersTotal = others.reduce(function(s, w) { return s + w.widthPct; }, 0); if (othersTotal === 0) othersTotal = 1; others.forEach(function(w) { w.widthPct = (w.widthPct / othersTotal) * remainingPct; }); }
+    saveAndRender();
+  }
+
+  function addNewWidget(type) {
+    var title = ''; if (type !== 'spacer') { title = prompt('タイトルを入力 (空欄でタイトルバー非表示):'); if (title === null) return; }
+    var newWidget = null;
+    if (type === 'bookmark') { newWidget = { id: generateId(), type: 'bookmark', title: title, widthPct: 100, items: [] }; } 
+    else if (type === 'rss') { newWidget = { id: generateId(), type: 'rss', title: title, widthPct: 100, urls: [] }; } 
+    else if (type === 'calendar') { newWidget = { id: generateId(), type: 'calendar', title: title || 'カレンダー', widthPct: 100, visibleCalIds: [] }; } 
+    else if (type === 'spacer') { newWidget = { id: generateId(), type: 'spacer', widthPct: 100 }; }
+    
+    if (appState.rows.length === 0) { appState.rows.push([]); }
+    var targetRow = appState.rows[appState.rows.length - 1]; targetRow.push(newWidget);
+    var total = targetRow.reduce(function(s, w) { return s + w.widthPct; }, 0); targetRow.forEach(function(w) { w.widthPct = (w.widthPct / total) * 100; }); saveAndRender();
+  }
+
+  function deleteWidget(widgetId) {
+    if (confirm('この枠を削除しますか？')) {
+      appState.rows.forEach(function(row) {
+        var idx = row.findIndex(function(w) { return w.id === widgetId; });
+        if (idx > -1) { row.splice(idx, 1); if (row.length > 0) { var total = row.reduce(function(s, w) { return s + w.widthPct; }, 0); if (total === 0) total = 1; row.forEach(function(w) { w.widthPct = (w.widthPct / total) * 100; }); } }
+      }); saveAndRender();
+    }
+  }
+
+  function addBookmark(widgetId) { var title = prompt('ブックマーク名:'); if (!title) return; var url = prompt('URL (https://...):'); if (!url) return; findWidgetById(widgetId).items.push({ title: title, url: url }); saveAndRender(); }
+  function deleteBookmark(widgetId, index) { if (confirm('削除しますか？')) { findWidgetById(widgetId).items.splice(index, 1); saveAndRender(); } }
+  function addRssUrl(widgetId) { var url = prompt('① RSSのURLを入力:'); if (!url) return; var name = prompt('② 表示名を入力 (例: ITニュース):'); if (!name) return; findWidgetById(widgetId).urls.push({ url: url, name: name }); saveAndRender(); }
+  function deleteRssUrl(widgetId, index) { if (confirm('削除しますか？')) { findWidgetById(widgetId).urls.splice(index, 1); saveAndRender(); } }
+
+  // ==========================================
+  // ドラッグ操作関連
+  // ==========================================
+  function initResize(e, leftId, rightId) {
+    e.preventDefault(); e.stopPropagation();
+    var clientX = e.type.indexOf('touch') !== -1 ? e.touches[0].clientX : e.clientX;
+    var leftWidget = findWidgetById(leftId); var rightWidget = findWidgetById(rightId); var containerWidth = e.target.closest('.dashboard-row').offsetWidth;
+    resizeData = { leftId: leftId, rightId: rightId, startX: clientX, startLeftPct: leftWidget.widthPct, startRightPct: rightWidget.widthPct, containerWidth: containerWidth, resizerEl: e.target };
+    document.body.classList.add('is-resizing'); resizeData.resizerEl.classList.add('is-resizing');
+    document.addEventListener('mousemove', doResize, {passive: false}); document.addEventListener('touchmove', doResize, {passive: false}); document.addEventListener('mouseup', stopResize); document.addEventListener('touchend', stopResize);
+  }
+  function doResize(e) {
+    if (!resizeData) return; e.preventDefault(); 
+    var clientX = e.type.indexOf('touch') !== -1 ? e.touches[0].clientX : e.clientX; var deltaX = clientX - resizeData.startX; var deltaPct = (deltaX / resizeData.containerWidth) * 100;
+    var newLeftPct = resizeData.startLeftPct + deltaPct; var newRightPct = resizeData.startRightPct - deltaPct;
+    var MIN_PCT = 10; 
+    if (newLeftPct < MIN_PCT) { newLeftPct = MIN_PCT; newRightPct = resizeData.startLeftPct + resizeData.startRightPct - MIN_PCT; } 
+    else if (newRightPct < MIN_PCT) { newRightPct = MIN_PCT; newLeftPct = resizeData.startLeftPct + resizeData.startRightPct - MIN_PCT; }
+    document.getElementById('wrapper-' + resizeData.leftId).style.width = newLeftPct + '%'; document.getElementById('wrapper-' + resizeData.rightId).style.width = newRightPct + '%';
+    resizeData.currentLeftPct = newLeftPct; resizeData.currentRightPct = newRightPct;
+  }
+  function stopResize(e) {
+    if (!resizeData) return; document.removeEventListener('mousemove', doResize); document.removeEventListener('touchmove', doResize); document.removeEventListener('mouseup', stopResize); document.removeEventListener('touchend', stopResize);
+    document.body.classList.remove('is-resizing'); resizeData.resizerEl.classList.remove('is-resizing');
+    if (resizeData.currentLeftPct && resizeData.currentRightPct) { findWidgetById(resizeData.leftId).widthPct = resizeData.currentLeftPct; findWidgetById(resizeData.rightId).widthPct = resizeData.currentRightPct; saveAndRender(); }
+    resizeData = null;
+  }
+
+  function initDragEvents() {
+    var itemHandles = document.querySelectorAll('.drag-handle');
+    for (var i = 0; i < itemHandles.length; i++) { itemHandles[i].onmousedown = function(e) { startDrag(e, 'item'); }; itemHandles[i].ontouchstart = function(e) { startDrag(e, 'item', {passive: false}); }; }
+    var widgetHandles = document.querySelectorAll('.widget-drag-handle');
+    for (var j = 0; j < widgetHandles.length; j++) { widgetHandles[j].onmousedown = function(e) { startDrag(e, 'widget'); }; widgetHandles[j].ontouchstart = function(e) { startDrag(e, 'widget', {passive: false}); }; }
+  }
+  function startDrag(e, type) {
+    if (!isEditMode) return; dragType = type;
+    if (type === 'item') { dragEl = e.target.closest('li'); sourceId = dragEl.getAttribute('data-widget-id'); dragEl.classList.add('dragging'); } 
+    else { dragEl = e.target.closest('.widget-wrapper'); sourceId = dragEl.id.replace('wrapper-', ''); dragEl.classList.add('dragging-widget'); }
+    document.addEventListener('mousemove', onDragMove, {passive: false}); document.addEventListener('touchmove', onDragMove, {passive: false}); document.addEventListener('mouseup', onDragEnd); document.addEventListener('touchend', onDragEnd);
+  }
+  function onDragMove(e) {
+    if (!dragEl) return; e.preventDefault(); 
+    var clientX = e.type.indexOf('touch') !== -1 ? e.touches[0].clientX : e.clientX; var clientY = e.type.indexOf('touch') !== -1 ? e.touches[0].clientY : e.clientY;
+    var targetEl = document.elementFromPoint(clientX, clientY); if (!targetEl) return;
+    if (dragType === 'item') {
+      var targetLi = targetEl.closest('li');
+      if (targetLi && targetLi !== dragEl && targetLi.getAttribute('data-widget-id') === sourceId) {
+        if (clientY < targetLi.getBoundingClientRect().top + targetLi.getBoundingClientRect().height / 2) { targetLi.parentNode.insertBefore(dragEl, targetLi); } 
+        else { targetLi.parentNode.insertBefore(dragEl, targetLi.nextSibling); }
+      }
+    } else {
+      var targetWrapper = targetEl.closest('.widget-wrapper'); var targetRow = targetEl.closest('.dashboard-row');
+      if (targetWrapper && targetWrapper !== dragEl) {
+        if (clientX < targetWrapper.getBoundingClientRect().left + targetWrapper.getBoundingClientRect().width / 2) { targetWrapper.parentNode.insertBefore(dragEl, targetWrapper); } 
+        else { targetWrapper.parentNode.insertBefore(dragEl, targetWrapper.nextSibling); }
+      } else if (targetRow && !targetWrapper && targetRow !== dragEl.parentNode) { targetRow.appendChild(dragEl); }
+    }
+  }
+  function onDragEnd(e) {
+    if (!dragEl) return; document.removeEventListener('mousemove', onDragMove); document.removeEventListener('touchmove', onDragMove); document.removeEventListener('mouseup', onDragEnd); document.removeEventListener('touchend', onDragEnd);
+    if (dragType === 'item') {
+      dragEl.classList.remove('dragging'); var newItemsOrder = Array.from(dragEl.parentNode.children).map(function(li) { return { title: li.getAttribute('data-title'), url: li.getAttribute('data-url') }; });
+      findWidgetById(sourceId).items = newItemsOrder; 
+    } else {
+      dragEl.classList.remove('dragging-widget'); var newRows = []; var rowElements = document.querySelectorAll('.dashboard-row');
+      for (var r = 0; r < rowElements.length; r++) {
+        var rowWidgets = []; var wrapperElements = rowElements[r].querySelectorAll('.widget-wrapper');
+        for (var w = 0; w < wrapperElements.length; w++) { var wdg = findWidgetById(wrapperElements[w].id.replace('wrapper-', '')); if (wdg) rowWidgets.push(wdg); }
+        if (rowWidgets.length > 0) { var total = rowWidgets.reduce(function(s, x) { return s + x.widthPct; }, 0); if (total === 0) total = 1; rowWidgets.forEach(function(x) { x.widthPct = (x.widthPct / total) * 100; }); newRows.push(rowWidgets); }
+      }
+      appState.rows = newRows;
+    }
+    dragEl = null; sourceId = null; dragType = null; saveAndRender();
+  }
+
+  // ==========================================
+  // RSS・カレンダー描画
+  // ==========================================
+  function fetchAllRssData(widgetId, urlObjects) {
+    var container = document.getElementById('rss-content-' + widgetId); if (!container) return;
+    if (!urlObjects || urlObjects.length === 0) { container.innerHTML = '<div style="color:#aaa; font-size:0.9rem;">URLがありません</div>'; return; }
+    container.innerHTML = '読み込み中... (' + urlObjects.length + '件)';
+    var fetchPromises = urlObjects.map(function(urlObj) {
+      return new Promise(function(resolve) { google.script.run.withSuccessHandler(function(res) { resolve({ urlObj: urlObj, data: res }); }).withFailureHandler(function(err) { resolve({ urlObj: urlObj, error: err }); }).fetchRss(urlObj.url); });
+    });
+    Promise.all(fetchPromises).then(function(results) {
+      var allItems = []; var sources = []; var needsHealSave = false;
+      results.forEach(function(res) {
+        if (res.error || res.data.indexOf('<error>') !== -1) return; 
+        try {
+          var parser = new DOMParser(); var xmlDoc = parser.parseFromString(res.data, 'text/xml');
+          var channelTitleNode = xmlDoc.querySelector('channel > title'); var actualTitle = channelTitleNode ? channelTitleNode.textContent : '不明';
+          if (res.urlObj.name === '登録済みサイト' && actualTitle !== '不明') { res.urlObj.name = actualTitle.length > 15 ? actualTitle.substring(0, 15) + '...' : actualTitle; needsHealSave = true; }
+          var sourceName = res.urlObj.name; if (sources.indexOf(sourceName) === -1) { sources.push(sourceName); }
+          var itemNodes = Array.from(xmlDoc.querySelectorAll('item'));
+          var items = itemNodes.map(function(item) {
+            var dateNode = item.querySelector('pubDate'); var titleNode = item.querySelector('title'); var linkNode = item.querySelector('link');
+            var dateObj = new Date(0); var dateStr = '';
+            if (dateNode) {
+              var parsedDate = new Date(dateNode.textContent);
+              if (!isNaN(parsedDate.getTime())) {
+                dateObj = parsedDate; var m = dateObj.getMonth() + 1; var d = dateObj.getDate(); var h = String(dateObj.getHours()).padStart(2, '0'); var min = String(dateObj.getMinutes()).padStart(2, '0'); dateStr = m + '/' + d + ' ' + h + ':' + min;
+              }
+            }
+            return { title: titleNode ? titleNode.textContent : '無題', link: linkNode ? linkNode.textContent : '#', dateStr: dateStr, timestamp: dateObj.getTime(), source: sourceName };
+          });
+          allItems = allItems.concat(items);
+        } catch(e) {}
+      });
+      if (needsHealSave) { localStorage.setItem('portal_state', JSON.stringify(appState)); }
+      allItems.sort(function(a, b) { return b.timestamp - a.timestamp; });
+      rssDataCache[widgetId] = { sources: sources.join(' / '), items: allItems, page: 1, expanded: false };
+      renderRssContent(widgetId);
+    });
+  }
+  function toggleRssExpand(widgetId) { if (rssDataCache[widgetId]) { rssDataCache[widgetId].expanded = !rssDataCache[widgetId].expanded; rssDataCache[widgetId].page = 1; renderRssContent(widgetId); } }
+  function changeRssPage(widgetId, delta) { if (rssDataCache[widgetId]) { rssDataCache[widgetId].page += delta; renderRssContent(widgetId); } }
+  function renderRssContent(widgetId) {
+    var cache = rssDataCache[widgetId]; if (!cache) return;
+    var container = document.getElementById('rss-content-' + widgetId); if (!container) return;
+    var itemsPerPage = cache.expanded ? 20 : 5; var totalPages = Math.ceil(cache.items.length / itemsPerPage);
+    var startIndex = (cache.page - 1) * itemsPerPage; var currentItems = cache.items.slice(startIndex, startIndex + itemsPerPage);
+    var htmlStr = '<ul>';
+    currentItems.forEach(function(item) { htmlStr += '<li><div class="item-content"><span class="rss-source-badge">' + item.source + '</span><a href="' + item.link + '" target="_blank" title="' + item.title + '">' + item.title + '</a></div><span class="rss-date">' + item.dateStr + '</span></li>'; });
+    htmlStr += '</ul>';
+    if (cache.items.length > itemsPerPage || cache.expanded) {
+      htmlStr += '<div class="pagination">'; var btnText = cache.expanded ? '▲ 閉じる' : '▼ もっと見る';
+      htmlStr += '<button onclick="toggleRssExpand(\'' + widgetId + '\')" style="font-size:0.8rem;">' + btnText + '</button><div style="font-size:0.9rem;">';
+      if (cache.expanded && totalPages > 1) {
+        if (cache.page > 1) { htmlStr += '<button onclick="changeRssPage(\'' + widgetId + '\', -1)">◀</button> '; }
+        htmlStr += '<span> ' + cache.page + ' / ' + totalPages + ' </span>';
+        if (cache.page < totalPages) { htmlStr += ' <button onclick="changeRssPage(\'' + widgetId + '\', 1)">▶</button>'; }
+      }
+      htmlStr += '</div></div>';
+    }
+    container.innerHTML = htmlStr;
+  }
+
+  function loadCalendarData(widgetId, year, month) {
+    var container = document.getElementById('cal-content-' + widgetId);
+    if (container) container.innerHTML = '<div style="color:#aaa; font-size:0.9rem; padding:20px; text-align:center;">カレンダーを読み込み中...</div>';
+    google.script.run.withSuccessHandler(function(resStr) {
+      var res = JSON.parse(resStr);
+      calendarDataCache[widgetId] = { year: res.targetYear, month: res.targetMonth, calendars: res.calendars, events: res.events };
+      renderCalendarContent(widgetId);
+    }).withFailureHandler(function(err) {
+      if (container) container.innerHTML = '<div style="color:#ff8a80;">取得失敗</div>';
+    }).fetchCalendarData(year, month);
+  }
+  function changeCalMonth(widgetId, delta) {
+    var cache = calendarDataCache[widgetId]; if(!cache) return;
+    var y = cache.year; var m = cache.month + delta;
+    if (m > 12) { m = 1; y++; } else if (m < 1) { m = 12; y--; }
+    loadCalendarData(widgetId, y, m);
+  }
+  function toggleCalFilter(widgetId, calId, isChecked) {
+    var widget = findWidgetById(widgetId); var cache = calendarDataCache[widgetId];
+    if (!widget.visibleCalIds) widget.visibleCalIds = [];
+    if (widget.visibleCalIds.length === 0 && cache) { widget.visibleCalIds = cache.calendars.map(function(c){return c.id;}); }
+    if (isChecked) { if (widget.visibleCalIds.indexOf(calId) === -1) widget.visibleCalIds.push(calId); } 
+    else { widget.visibleCalIds = widget.visibleCalIds.filter(function(id) { return id !== calId; }); }
+    saveAndRender();
+  }
+  
+  function renderCalendarContent(widgetId) {
+    var widget = findWidgetById(widgetId); var cache = calendarDataCache[widgetId];
+    if (!cache) return; var container = document.getElementById('cal-content-' + widgetId); if (!container) return;
+    var html = '<div class="cal-header"><button onclick="changeCalMonth(\''+widgetId+'\', -1)">＜</button><span>'+cache.year+'年 '+cache.month+'月</span><button onclick="changeCalMonth(\''+widgetId+'\', 1)">＞</button></div>';
+    html += '<div class="edit-only-block" style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; margin-bottom:10px;"><div style="font-size:0.8rem; margin-bottom:8px; color:#ccc;">✅ カレンダー選択</div><div style="display:flex; flex-wrap:wrap; gap:10px;">';
+    cache.calendars.forEach(function(cal) {
+      var isChecked = (!widget.visibleCalIds || widget.visibleCalIds.length === 0) || widget.visibleCalIds.indexOf(cal.id) !== -1;
+      html += '<label style="font-size:0.8rem; display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" onchange="toggleCalFilter(\''+widgetId+'\', \''+cal.id+'\', this.checked)" '+(isChecked?'checked':'')+'> <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:'+cal.color+'"></span> '+cal.name+'</label>';
+    });
+    html += '</div></div><div class="cal-grid">';
+    var days = ['日', '月', '火', '水', '木', '金', '土'];
+    days.forEach(function(d) { html += '<div class="cal-day-header">'+d+'</div>'; });
+    var firstDay = new Date(cache.year, cache.month - 1, 1).getDay(); var lastDate = new Date(cache.year, cache.month, 0).getDate();
+    for (var i = 0; i < firstDay; i++) { html += '<div class="cal-cell empty"></div>'; }
+    for (var d = 1; d <= lastDate; d++) {
+      html += '<div class="cal-cell"><div class="cal-date">'+d+'</div>';
+      var dayEvents = cache.events.filter(function(ev) {
+        if (widget.visibleCalIds && widget.visibleCalIds.length > 0 && widget.visibleCalIds.indexOf(ev.calendarId) === -1) return false;
+        var evDate = new Date(ev.startTime); return evDate.getFullYear() === cache.year && (evDate.getMonth() + 1) === cache.month && evDate.getDate() === d;
+      });
+      // ★修正: hexToRgbaを使って透明度40%の背景色を生成し、左端に元の色でアクセントラインを引く
+      dayEvents.forEach(function(ev) { 
+        var bgColor = hexToRgba(ev.color, 0.4); 
+        html += '<div class="cal-event" style="background-color:'+bgColor+'; border-left: 3px solid '+ev.color+';" title="'+ev.title+'">'+ev.title+'</div>'; 
+      });
+      html += '</div>';
+    }
+    html += '</div>'; container.innerHTML = html;
+  }
+
+  // ==========================================
+  // 全体の描画
+  // ==========================================
+  function renderAll() {
+    var container = document.getElementById('widget-container'); container.innerHTML = ''; 
+    appState.rows.forEach(function(row, rowIndex) {
+      var rowDiv = document.createElement('div'); rowDiv.className = 'dashboard-row'; rowDiv.id = 'row-' + rowIndex;
+      row.forEach(function(widget, colIndex) {
+        var wrapperDiv = document.createElement('div'); wrapperDiv.className = 'widget-wrapper'; wrapperDiv.id = 'wrapper-' + widget.id; wrapperDiv.style.width = widget.widthPct + '%'; 
+        var widgetDiv = document.createElement('div');
+        if (widget.type === 'spacer') {
+          widgetDiv.className = isEditMode ? 'widget spacer-edit' : 'widget spacer-view';
+          if (isEditMode) {
+            var spacerHtml = '<div style="display:flex; flex-direction:column; align-items:center; gap:10px; color:rgba(255,255,255,0.6);"><div style="display:flex; align-items:center; gap:8px;"><div class="widget-drag-handle" style="display:block; padding:0;">✥</div><span>🔲 空白</span></div><button class="danger-btn ui-btn" onclick="deleteWidget(\'' + widget.id + '\')" style="font-size:0.75rem; padding:2px 8px;">削除</button></div>';
+            widgetDiv.innerHTML = spacerHtml;
+          }
+          wrapperDiv.appendChild(widgetDiv);
+        } else {
+          widgetDiv.className = 'widget glass';
+          var titleCls = !widget.title ? 'no-title' : ''; var displayTitle = widget.title ? widget.title : 'タイトルなし'; 
+          var iconStr = widget.type === 'bookmark' ? '📌' : (widget.type === 'rss' ? '📰' : '📅');
+          
+          var headerHtml = '<div class="widget-header ' + titleCls + '"><div style="display:flex; align-items:center;"><div class="widget-drag-handle" title="ドラッグで移動">✥</div><h2>' + iconStr + ' ' + displayTitle + '</h2></div><div class="widget-controls edit-only"><div style="display:flex; gap:4px; background:rgba(0,0,0,0.3); padding:4px; border-radius:6px; margin-right:5px;"><button class="preset-btn" onclick="setWidgetWidthPreset(\'' + widget.id + '\', 25)">1/4</button><button class="preset-btn" onclick="setWidgetWidthPreset(\'' + widget.id + '\', 33.33)">1/3</button><button class="preset-btn" onclick="setWidgetWidthPreset(\'' + widget.id + '\', 50)">1/2</button><button class="preset-btn" onclick="setWidgetWidthPreset(\'' + widget.id + '\', 100)">MAX</button></div>';
+          if (widget.type === 'bookmark') { headerHtml += '<button class="ui-btn" onclick="addBookmark(\'' + widget.id + '\')" style="font-size:0.8rem">＋追加</button>'; }
+          headerHtml += '<button class="danger-btn ui-btn" onclick="deleteWidget(\'' + widget.id + '\')" style="font-size:0.8rem">削除</button></div></div>';
+          
+          var contentHtml = '';
+          if (widget.type === 'bookmark') {
+            contentHtml += '<ul>';
+            widget.items.forEach(function(item, index) { contentHtml += '<li data-widget-id="' + widget.id + '" data-title="' + item.title + '" data-url="' + item.url + '"><div class="item-content"><div class="drag-handle edit-only" title="入れ替え">≡</div><img src="https://www.google.com/s2/favicons?domain=' + item.url + '" style="width:16px; height:16px; border-radius:3px;"><a href="' + item.url + '" target="_blank">' + item.title + '</a></div><div class="edit-only"><button class="danger-btn ui-btn" onclick="deleteBookmark(\'' + widget.id + '\', ' + index + ')" style="padding: 4px 8px; font-size: 0.8rem;">✕</button></div></li>'; });
+            contentHtml += '</ul>'; widgetDiv.innerHTML = headerHtml + contentHtml;
+          } 
+          else if (widget.type === 'rss') {
+            var urlManagerHtml = '<div class="edit-only-block" style="margin-bottom:15px; background:rgba(0,0,0,0.25); padding:10px; border-radius:10px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><span style="font-size:0.85rem; color:#ddd;">登録URL (' + widget.urls.length + ')</span><button class="ui-btn" onclick="addRssUrl(\'' + widget.id + '\')" style="font-size:0.75rem; padding:4px 8px;">＋追加</button></div><ul style="margin-bottom:0; flex-grow:0;">';
+            widget.urls.forEach(function(u, i) { urlManagerHtml += '<li style="padding:4px 8px; margin-bottom:4px; background:rgba(255,255,255,0.05); border-radius:6px; font-size:0.8rem;"><div class="item-content" style="color:#ffffff;">' + u.name + '</div><button class="danger-btn ui-btn" onclick="deleteRssUrl(\'' + widget.id + '\', ' + i + ')" style="padding:2px 8px;">✕</button></li>'; });
+            urlManagerHtml += '</ul></div>'; contentHtml += urlManagerHtml; contentHtml += '<div id="rss-content-' + widget.id + '"></div>'; widgetDiv.innerHTML = headerHtml + contentHtml;
+            if (!isEditMode) { if (!rssDataCache[widget.id]) { setTimeout(function() { fetchAllRssData(widget.id, widget.urls); }, 0); } else { setTimeout(function() { renderRssContent(widget.id); }, 0); } }
+          }
+          else if (widget.type === 'calendar') {
+            contentHtml += '<div id="cal-content-' + widget.id + '"></div>'; 
+            widgetDiv.innerHTML = headerHtml + contentHtml;
+            if (!calendarDataCache[widget.id]) {
+              var now = new Date(); setTimeout(function() { loadCalendarData(widget.id, now.getFullYear(), now.getMonth() + 1); }, 0);
+            } else { setTimeout(function() { renderCalendarContent(widget.id); }, 0); }
+          }
+          wrapperDiv.appendChild(widgetDiv);
+        }
+        if (isEditMode && colIndex < row.length - 1) {
+          var resizerDiv = document.createElement('div'); resizerDiv.className = 'widget-resizer';
+          resizerDiv.onmousedown = function(e) { initResize(e, widget.id, row[colIndex + 1].id); }; resizerDiv.ontouchstart = function(e) { initResize(e, widget.id, row[colIndex + 1].id); };
+          wrapperDiv.appendChild(resizerDiv);
+        }
+        rowDiv.appendChild(wrapperDiv);
+      });
+      container.appendChild(rowDiv);
+    });
+    initDragEvents();
+  }
+
+  function updateClock() {
+    var now = new Date(); document.getElementById('time').textContent = now.toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'}); document.getElementById('date').textContent = now.toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric', weekday: 'short' });
+  }
+  
+  window.addEventListener('load', function() { 
+    initDataSafely(); initHeaderSettings(); setInterval(updateClock, 1000); updateClock(); applyBackground(); renderAll(); 
+  });
+</script>
+</body>
+</html>
