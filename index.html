@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     /* =========================================
-       基本スタイル (1600px幅 / ガラスデザイン)
+       基本スタイル (1600px / ガラスデザイン)
        ========================================= */
     body {
       margin: 0; min-height: 100vh;
@@ -29,12 +29,13 @@
     .market-ticker-container { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 5px; }
     .market-item { display: flex; align-items: baseline; gap: 6px; background: rgba(0,0,0,0.25); padding: 6px 14px; border-radius: 8px; white-space: nowrap; }
     .diff-up { color: #ff8a80; } .diff-down { color: #82c8ff; }
-    .headline-ticker { width: 100%; overflow: hidden; white-space: nowrap; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px 0; position: relative; display: flex; align-items: center; }
+    .headline-ticker { width: 100%; overflow: hidden; white-space: nowrap; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px 0; position: relative; }
     .headline-content { display: inline-block; padding-left: 100%; animation: marquee 45s linear infinite; }
     .headline-item { margin-right: 50px; color: #fff; text-decoration: none; font-size: 0.95rem; }
     .headline-badge { background: #E50914; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 8px; font-weight: bold; }
     @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
 
+    /* 検索窓 & Gemini */
     .search-container { display: flex; flex-direction: column; align-items: center; margin-top: 10px; width: 100%; }
     .search-bar { display: flex; gap: 10px; width: 100%; max-width: 750px; position: relative; }
     .search-input { flex-grow: 1; padding: 12px 20px; border-radius: 25px; border: 2px solid transparent; font-size: 1.05rem; outline: none; color: #333; }
@@ -43,6 +44,7 @@
     .gemini-options-panel { display: none; justify-content: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
     .gemini-opt-label { background: rgba(0,0,0,0.4); padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 
+    /* レイアウト & ウィジェット */
     .edit-only { display: none !important; }
     body.is-edit-mode .edit-only { display: flex !important; }
     #widget-container { display: flex; flex-direction: column; gap: 15px; }
@@ -56,12 +58,13 @@
     .widget-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; margin-bottom: 15px; }
     .widget-header h2 { margin: 0; font-size: 1.1rem; font-weight: 500; display: flex; align-items: center; gap: 8px; }
 
-    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    /* カレンダーUI */
+    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
     .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: rgba(255,255,255,0.15); border-radius: 8px; overflow: hidden; }
     .cal-day-header { text-align: center; font-size: 0.8rem; padding: 6px 0; background: rgba(0,0,0,0.4); }
     .cal-cell { min-height: 85px; background: rgba(0,0,0,0.25); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
     .cal-date { font-size: 0.85rem; text-align: right; color: #eee; }
-    .cal-event { font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; color: #fff; font-weight: 500; text-shadow: 1px 1px 2px #000; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .cal-event { font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; color: #fff; font-weight: 500; text-shadow: 1px 1px 2px #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     ul { list-style: none; padding: 0; margin: 0; }
     li { display: flex; justify-content: space-between; align-items: center; padding: 8px; margin-bottom: 5px; background: rgba(255,255,255,0.05); border-radius: 8px; }
@@ -72,6 +75,12 @@
   </style>
 </head>
 <body>
+
+<div id="error-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;">
+  <h2>⚠️ 起動エラーを検知しました</h2>
+  <p style="color:#ff8a80; font-size:0.9rem; margin-bottom: 20px;">セーブデータの形式が古い可能性があります。</p>
+  <button onclick="localStorage.removeItem('portal_state'); location.reload();" style="margin-top:20px; padding:15px 30px; font-size:1.1rem; background:#E50914; color:white; border:none; border-radius:8px; cursor:pointer;">データをリセットして復旧</button>
+</div>
 
 <div class="container" id="main-app">
   <header class="glass">
@@ -107,14 +116,14 @@
     <div class="search-container">
       <div class="search-bar">
         <form onsubmit="handleSearchSubmit(event)" style="display:flex; flex-grow:1;">
-          <input type="text" id="main-search-input" class="search-input" placeholder="Google / Gemini 検索...">
+          <input type="text" id="main-search-input" class="search-input" placeholder="Google / Gemini 検索..." autocomplete="off">
           <button type="submit" class="ui-btn" style="border-radius:0 25px 25px 0; margin-left:-50px; background:none; border:none; color:#333;">🔍</button>
         </form>
         <button type="button" id="gemini-toggle-btn" class="gemini-btn" onclick="toggleGeminiMode()">✨ Gemini</button>
       </div>
       <div id="gemini-options-panel" class="gemini-options-panel">
         <label class="gemini-opt-label"><input type="checkbox" id="gem-opt-think"> 🧠 思考</label>
-        <label class="gemini-opt-label"><input type="checkbox" id="gem-opt-prog"> 💻 プロ職</label>
+        <label class="gemini-opt-label"><input type="checkbox" id="gem-opt-prog"> 💻 プロ</label>
         <label class="gemini-opt-label"><input type="checkbox" id="gem-opt-step"> 📋 順序</label>
       </div>
     </div>
@@ -122,12 +131,13 @@
 
   <main id="widget-container"></main>
 
-  <div class="edit-only" style="justify-content: center; gap: 15px; margin-top: 20px;">
+  <div class="edit-only" style="justify-content: center; gap: 15px; margin-top: 20px; width: 100%; flex-wrap: wrap;">
     <button class="ui-btn" onclick="addNewWidget('bookmark')">＋ ブックマーク</button>
     <button class="ui-btn" onclick="addNewWidget('rss')">＋ RSS</button>
     <button class="ui-btn" onclick="addNewWidget('calendar')">＋ カレンダー</button>
     <button class="ui-btn" onclick="addNewWidget('spacer')">＋ 空白</button>
-    <button class="ui-btn primary-btn" onclick="addNewRow()">＋ 段追加</button>
+    <button class="ui-btn primary-btn" onclick="addNewRow()">＋ 新しい段を追加</button>
+    <button class="ui-btn danger-btn" onclick="if(confirm('全てのデータを消去しますか？')) { localStorage.removeItem('portal_state'); location.reload(); }">全データ初期化</button>
   </div>
 </div>
 
@@ -142,16 +152,18 @@
   var isGeminiMode = false;
   var rssCache = {};
   var calCache = {};
-  var resizeData = null;
 
+  // 通信関数 (fetch)
   async function callGasApi(params) {
-    if (!GAS_API_URL || GAS_API_URL.length < 30) {
-      console.error('GAS_API_URLが設定されていません。');
-      return { data: '', error: 'API URL not set' };
+    if (!GAS_API_URL || GAS_API_URL.length < 20) return { data: '', error: 'URL not set' };
+    try {
+      const query = new URLSearchParams(params).toString();
+      const res = await fetch(`${GAS_API_URL}?${query}`);
+      return await res.json();
+    } catch (e) {
+      console.error('API Error:', e);
+      return { data: '', error: e.message };
     }
-    const query = new URLSearchParams(params).toString();
-    const res = await fetch(`${GAS_API_URL}?${query}`);
-    return await res.json();
   }
 
   function hexToRgba(hex, a) {
@@ -162,6 +174,7 @@
     return `rgba(${r},${g},${b},${a})`;
   }
 
+  // 検索
   function toggleGeminiMode() { isGeminiMode = !isGeminiMode; document.getElementById('gemini-options-panel').style.display = isGeminiMode ? 'flex' : 'none'; document.getElementById('gemini-toggle-btn').classList.toggle('active', isGeminiMode); }
   function handleSearchSubmit(e) {
     e.preventDefault();
@@ -171,4 +184,174 @@
       if (document.getElementById('gem-opt-think').checked) opts.push("思考プロセスを開示して。");
       if (document.getElementById('gem-opt-prog').checked) opts.push("プログラマ視点でコードを含めて。");
       if (document.getElementById('gem-opt-step').checked) opts.push("ステップバイステップで。");
-      const finalQ = opts.length ? "【指示】" + opts.join(" ") + "\n
+      const finalQ = opts.length ? "【指示】" + opts.join(" ") + "\n\n" + q : q;
+      window.open('https://gemini.google.com/app?q=' + encodeURIComponent(finalQ), '_blank');
+    } else { window.open('https://www.google.com/search?q=' + encodeURIComponent(q), '_blank'); }
+  }
+
+  // RSS/Market
+  async function fetchHeadlineRss() {
+    if(!appState.headlineUrl) return;
+    const res = await callGasApi({ action: 'rss', url: appState.headlineUrl });
+    if(!res.data) return;
+    const parser = new DOMParser(); const xml = parser.parseFromString(res.data, 'text/xml');
+    const items = Array.from(xml.querySelectorAll('item')).slice(0, 10);
+    document.getElementById('headline-content').innerHTML = items.map(i => `<a href="${i.querySelector('link')?.textContent}" target="_blank" class="headline-item"><span class="headline-badge">NEW</span>${i.querySelector('title')?.textContent}</a>`).join('');
+  }
+
+  async function fetchMarketTicker() {
+    if(!appState.markets?.length) return;
+    const results = await Promise.all(appState.markets.map(m => callGasApi({ action: 'rss', url: `https://query1.finance.yahoo.com/v8/finance/chart/${m.symbol}?interval=1d` }).then(r => ({ m, d: JSON.parse(r.data) }))));
+    document.getElementById('market-ticker').innerHTML = results.map(res => {
+      if(!res.d) return '';
+      const meta = res.d.chart.result[0].meta; const price = meta.regularMarketPrice; const diff = price - (meta.previousClose || price);
+      return `<div class="market-item"><span>${res.m.label}</span><b>${price.toFixed(2)}</b><span class="${diff>=0?'diff-up':'diff-down'}">${diff>=0?'△':'▼'}${Math.abs(diff).toFixed(2)}</span></div>`;
+    }).join('');
+  }
+
+  // カレンダー
+  async function loadCalendarData(id, y, m) {
+    const res = await callGasApi({ action: 'calendar', year: y, month: m });
+    if(!res.targetYear) return;
+    calCache[id] = res; renderCalendar(id);
+  }
+  function renderCalendar(id) {
+    const cache = calCache[id]; if(!cache) return;
+    const container = document.getElementById('cal-' + id); if(!container) return;
+    let html = `<div class="cal-header"><button onclick="moveMonth('${id}',-1)">＜</button><b>${cache.targetYear}年 ${cache.targetMonth}月</b><button onclick="moveMonth('${id}',1)">＞</button></div><div class="cal-grid">`;
+    ['日','月','火','水','木','金','土'].forEach(d => html += `<div class="cal-day-header">${d}</div>`);
+    const first = new Date(cache.targetYear, cache.targetMonth-1, 1).getDay(); const last = new Date(cache.targetYear, cache.targetMonth, 0).getDate();
+    for(let i=0; i<first; i++) html += '<div class="cal-cell" style="opacity:0.2"></div>';
+    for(let d=1; d<=last; d++) {
+      const evs = cache.events.filter(e => new Date(e.startTime).getDate() === d);
+      html += `<div class="cal-cell"><div class="cal-date">${d}</div>${evs.map(e => `<div class="cal-event" style="background:${hexToRgba(e.color,0.4)}; border-left:3px solid ${e.color}">${e.title}</div>`).join('')}</div>`;
+    }
+    container.innerHTML = html + '</div>';
+  }
+  function moveMonth(id, d) { let c = calCache[id]; let m = c.targetMonth+d; let y = c.targetYear; if(m>12){m=1;y++} if(m<1){m=12;y--} loadCalendarData(id,y,m); }
+
+  // RSS個別
+  async function fetchRssWidget(id, urls) {
+    const cont = document.getElementById('rss-'+id); if(!cont || !urls.length) return;
+    try {
+      const res = await Promise.all(urls.map(u => callGasApi({ action: 'rss', url: u.url }).then(r => ({ name: u.name, d: r.data }))));
+      let items = [];
+      res.forEach(r => {
+        if(!r.d) return;
+        const xml = new DOMParser().parseFromString(r.d, 'text/xml');
+        Array.from(xml.querySelectorAll('item')).forEach(i => items.push({ t: i.querySelector('title')?.textContent, l: i.querySelector('link')?.textContent, s: r.name, ts: new Date(i.querySelector('pubDate')?.textContent).getTime() }));
+      });
+      items.sort((a,b) => b.ts - a.ts);
+      cont.innerHTML = '<ul>' + items.slice(0, 6).map(i => `<li><div class="item-content"><small class="rss-source-badge">${i.s}</small><a href="${i.l}" target="_blank">${i.t}</a></div></li>`).join('') + '</ul>';
+    } catch(e) {}
+  }
+
+  // レイアウト管理
+  function renderAll() {
+    const container = document.getElementById('widget-container'); 
+    if(!container) return;
+    container.innerHTML = '';
+    if(!appState || !appState.rows) return;
+
+    appState.rows.forEach((row, rIdx) => {
+      const rowDiv = document.createElement('div'); rowDiv.className = 'dashboard-row';
+      row.forEach((w, wIdx) => {
+        const wrap = document.createElement('div'); wrap.className = 'widget-wrapper'; wrap.id = 'wrap-'+w.id; wrap.style.width = w.widthPct + '%';
+        const inner = document.createElement('div'); inner.className = 'widget glass';
+        if(w.type==='spacer' && !isEditMode) inner.style.visibility = 'hidden';
+        
+        let header = `<div class="widget-header"><div style="display:flex;align-items:center;"><div class="widget-drag-handle">✥</div><h2>${w.title || ''}</h2></div><div class="edit-only"><button class="ui-btn danger-btn" onclick="deleteWidget('${w.id}')">✕</button></div></div>`;
+        let content = `<div id="${w.type==='calendar'?'cal-':(w.type==='rss'?'rss-':'')}${w.id}"></div>`;
+        if(w.type==='bookmark') content = '<ul>' + (w.items || []).map(i => `<li><div class="item-content"><a href="${i.url}" target="_blank">${i.title}</a></div></li>`).join('') + '</ul>';
+        
+        inner.innerHTML = header + content; wrap.appendChild(inner);
+        if(isEditMode && wIdx < row.length - 1) {
+          const resizer = document.createElement('div'); resizer.className = 'widget-resizer';
+          resizer.onmousedown = (e) => initResize(e, w.id, row[wIdx+1].id);
+          wrap.appendChild(resizer);
+        }
+        rowDiv.appendChild(wrap);
+        if(!isEditMode) {
+          if(w.type==='calendar') loadCalendarData(w.id, new Date().getFullYear(), new Date().getMonth()+1);
+          if(w.type==='rss') fetchRssWidget(w.id, w.urls || []);
+        }
+      });
+      container.appendChild(rowDiv);
+    });
+  }
+
+  // データ初期化 (徹底検証済み)
+  function initDataSafely() {
+    try {
+      const saved = localStorage.getItem('portal_state');
+      if (saved) {
+        appState = JSON.parse(saved);
+        // 旧データ形式 (rowsがない) の場合は強制リセットまたは変換が必要
+        if (!appState.rows || !Array.isArray(appState.rows)) {
+          console.warn("Old data format detected. Migrating...");
+          appState.rows = [[]]; // 最小構成にリセット
+        }
+      } else {
+        appState = { 
+          clock: { size: 2.2, font: 'system-ui' }, 
+          headlineUrl: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml', 
+          headlineSpeed: 45, 
+          markets: [{ symbol: '^GSPC', label: 'S&P 500' }, { symbol: '^N225', label: '日経平均' }], 
+          rows: [[
+            { id: 'w1', type: 'bookmark', title: 'Daily', widthPct: 50, items: [{ title: 'Google', url: 'https://google.com' }] },
+            { id: 'w2', type: 'rss', title: 'News', widthPct: 50, urls: [{ url: 'https://news.yahoo.co.jp/rss/topics/it.xml', name: 'Yahoo! IT' }] }
+          ]] 
+        };
+      }
+    } catch (e) {
+      console.error("Data Init Error:", e);
+      document.getElementById('error-overlay').style.display = 'flex';
+    }
+  }
+
+  function toggleEditMode() { isEditMode = !isEditMode; document.body.classList.toggle('is-edit-mode', isEditMode); document.getElementById('edit-toggle-btn').textContent = isEditMode ? '完了' : '⚙️ 編集モード'; renderAll(); }
+  function applyClockStyle() { const time = document.getElementById('time'); time.style.fontSize = document.getElementById('clock-size').value + 'rem'; time.style.fontFamily = document.getElementById('clock-font').value; }
+  function applyHeadlineSpeed() { const speed = document.getElementById('headline-speed').value; document.querySelector('.headline-content').style.animationDuration = speed + 's'; }
+  function saveHeaderSettings() { appState.clock.size = document.getElementById('clock-size').value; appState.clock.font = document.getElementById('clock-font').value; appState.headlineUrl = document.getElementById('headline-url').value; appState.headlineSpeed = document.getElementById('headline-speed').value; save(); }
+  function save() { localStorage.setItem('portal_state', JSON.stringify(appState)); }
+  function findWidget(id) { for(let r of appState.rows) { for(let w of r) { if(w.id === id) return w; } } }
+  function deleteWidget(id) { appState.rows.forEach(r => { const i = r.findIndex(w => w.id === id); if(i>-1) r.splice(i,1); }); save(); renderAll(); }
+  function addNewRow() { appState.rows.push([]); save(); renderAll(); }
+  function addNewWidget(type) { const t = prompt('タイトル:'); if(t===null) return; const w = { id: 'w'+Date.now(), type, title: t, widthPct: 100, items: [], urls: [] }; appState.rows[appState.rows.length-1].push(w); save(); renderAll(); }
+  function addMarketSymbol() { const s = prompt('シンボル (^N225など):'); const l = prompt('表示名:'); if(s && l) { if(!appState.markets) appState.markets = []; appState.markets.push({ symbol: s, label: l }); save(); fetchMarketTicker(); } }
+  
+  function initResize(e, leftId, rightId) {
+    const leftW = findWidget(leftId); const rightW = findWidget(rightId); const startX = e.clientX; const startL = leftW.widthPct; const startR = rightW.widthPct;
+    const move = (me) => { const delta = ((me.clientX - startX) / window.innerWidth) * 100; leftW.widthPct = Math.max(10, startL + delta); rightW.widthPct = Math.max(10, startR - delta); document.getElementById('wrap-'+leftId).style.width = leftW.widthPct + '%'; document.getElementById('wrap-'+rightId).style.width = rightW.widthPct + '%'; };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); save(); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  }
+
+  function updateClock() {
+    const n = new Date();
+    const timeEl = document.getElementById('time');
+    const dateEl = document.getElementById('date');
+    if(timeEl) timeEl.textContent = n.toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit'});
+    if(dateEl) dateEl.textContent = n.toLocaleDateString('ja-JP', {year:'numeric',month:'short',day:'numeric',weekday:'short'});
+  }
+
+  // 起動処理
+  window.onload = () => {
+    initDataSafely();
+    if(appState) {
+      document.getElementById('clock-size').value = appState.clock.size; 
+      document.getElementById('clock-font').value = appState.clock.font; 
+      document.getElementById('headline-url').value = appState.headlineUrl || ''; 
+      document.getElementById('headline-speed').value = appState.headlineSpeed || 45;
+      applyClockStyle(); 
+      applyHeadlineSpeed(); 
+      renderAll(); 
+      fetchHeadlineRss(); 
+      fetchMarketTicker();
+      updateClock();
+      setInterval(updateClock, 1000);
+    }
+  };
+</script>
+</body>
+</html>
