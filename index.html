@@ -17,10 +17,10 @@
     #clock-widget h1 { margin: 0; font-weight: 300; letter-spacing: 2px; line-height: 1.1; transition: all 0.2s;}
     #clock-widget p { margin: 5px 0 0 0; font-size: 1rem; color: rgba(255,255,255,0.8); }
 
-    /* 電光掲示板 */
     .market-ticker-container { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 5px; }
     .market-item { display: flex; align-items: baseline; gap: 6px; background: rgba(0,0,0,0.25); padding: 6px 14px; border-radius: 8px; white-space: nowrap; }
     .diff-up { color: #ff8a80; } .diff-down { color: #82c8ff; }
+    
     .headline-ticker { width: 100%; overflow: hidden; white-space: nowrap; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px 0; position: relative; }
     .headline-content { display: inline-block; padding-left: 100%; animation: marquee 45s linear infinite; }
     .headline-ticker:hover .headline-content { animation-play-state: paused; }
@@ -29,12 +29,13 @@
     @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
 
     /* サジェストUI */
-    .stock-search-wrapper { position: relative; width: 250px; }
-    #stock-suggestions { position: absolute; top: 100%; left: 0; right: 0; z-index: 9999; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; max-height: 300px; overflow-y: auto; margin-top: 5px; display: none; }
-    .suggestion-item { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: 0.2s; }
-    .suggestion-item:hover { background: rgba(255,255,255,0.1); }
+    .stock-search-wrapper { position: relative; width: 300px; }
+    #stock-suggestions { position: absolute; top: 100%; left: 0; right: 0; z-index: 9999; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; max-height: 350px; overflow-y: auto; margin-top: 5px; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .suggestion-item { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: 0.2s; }
+    .suggestion-item:hover { background: rgba(255,255,255,0.15); }
     .suggestion-item div:first-child { font-weight: bold; color: #82c8ff; font-size: 0.9rem; }
     .suggestion-item div:last-child { font-size: 0.75rem; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .suggestion-badge { background: #4caf50; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 5px; vertical-align: middle; }
 
     /* 検索窓 & Gemini */
     .search-container { display: flex; flex-direction: column; align-items: center; margin-top: 10px; width: 100%; }
@@ -81,11 +82,6 @@
 </head>
 <body>
 
-<div id="error-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;">
-  <h2>⚠️ 起動エラーを検知しました</h2>
-  <button onclick="localStorage.removeItem('portal_state'); location.reload();" style="margin-top:20px; padding:15px 30px; font-size:1.1rem; background:#E50914; color:white; border:none; border-radius:8px; cursor:pointer;">リセットして復旧</button>
-</div>
-
 <div class="container" id="main-app">
   <header class="glass">
     <div class="header-top">
@@ -105,10 +101,9 @@
         <div id="market-ticker" class="market-ticker-container"></div>
         <div class="edit-only" style="margin-top:5px; gap:10px; align-items:center;">
           <div class="stock-search-wrapper">
-            <input type="text" id="stock-search-input" class="edit-input" placeholder="銘柄名で検索して追加 (例: トヨタ)" style="width:100%;">
+            <input type="text" id="stock-search-input" class="edit-input" placeholder="一般名で検索 (例: 全世界, S&P500, 金)" style="width:100%;">
             <div id="stock-suggestions"></div>
           </div>
-          <span style="font-size:0.75rem; color:#aaa;">※選択で即追加</span>
         </div>
       </div>
       
@@ -160,9 +155,6 @@
 </div>
 
 <script>
-  // ==========================================
-  // API URLの設定済
-  // ==========================================
   const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxzjNS50HSy3lGFx3jM5u6hlJwh5t76t6bQmHzjMy1Z_0Z_7aVwvDzy-UOAKSmdXxkpWQ/exec';
 
   var appState = null;
@@ -178,6 +170,28 @@
   var searchTimeout = null;
 
   const CHART_COLORS = ['#8ab4f8', '#f28b82', '#fdd663', '#b388ff', '#81c995', '#ffb74d', '#4dd0e1', '#f48fb1'];
+
+  // ★新規：一般名称とティッカーを結びつけるカスタム辞書
+  const CUSTOM_ALIASES = [
+    { name: "全世界株式 (オルカン / MAXIS ETF)", symbol: "2559.T", type: "国内ETF" },
+    { name: "全世界株式 (VT / 米国ETF)", symbol: "VT", type: "米国ETF" },
+    { name: "S&P500 (MAXIS ETF)", symbol: "2558.T", type: "国内ETF" },
+    { name: "S&P500 (VOO / 米国ETF)", symbol: "VOO", type: "米国ETF" },
+    { name: "S&P500 (SPY / 米国ETF)", symbol: "SPY", type: "米国ETF" },
+    { name: "S&P500 (指数)", symbol: "^GSPC", type: "指数" },
+    { name: "日経平均 (指数)", symbol: "^N225", type: "指数" },
+    { name: "日経平均 (ETF)", symbol: "1321.T", type: "国内ETF" },
+    { name: "TOPIX (指数)", symbol: "^TOPX", type: "指数" },
+    { name: "NASDAQ 100 (QQQ)", symbol: "QQQ", type: "米国ETF" },
+    { name: "高配当 (VYM / 米国ETF)", symbol: "VYM", type: "米国ETF" },
+    { name: "高配当 (SPYD / 米国ETF)", symbol: "SPYD", type: "米国ETF" },
+    { name: "ドル円 (為替)", symbol: "USDJPY=X", type: "為替" },
+    { name: "ユーロ円 (為替)", symbol: "EURJPY=X", type: "為替" },
+    { name: "金 / ゴールド (GLD)", symbol: "GLD", type: "コモディティ" },
+    { name: "金 / ゴールド (国内ETF)", symbol: "1540.T", type: "国内ETF" },
+    { name: "原油 (WTI)", symbol: "CL=F", type: "コモディティ" },
+    { name: "ビットコイン (BTC)", symbol: "BTC-USD", type: "暗号資産" }
+  ];
 
   async function callGasApi(params) {
     try {
@@ -195,7 +209,6 @@
     return `rgba(${r},${g},${b},${a})`;
   }
 
-  // チャート用「＋」ボタンが押された時のスマートな挙動
   function focusStockSearch() {
     if(!isEditMode) toggleEditMode();
     setTimeout(() => {
@@ -210,40 +223,80 @@
     }, 100);
   }
 
-  // 銘柄検索 (サジェストUI連携)
+  // ★修正：辞書検索＋API検索のハイブリッド
   async function initStockSearch() {
     const input = document.getElementById('stock-search-input');
     const suggestBox = document.getElementById('stock-suggestions');
+    
     input.addEventListener('input', () => {
       clearTimeout(searchTimeout);
       const query = input.value.trim();
       if (!query) { suggestBox.style.display = 'none'; return; }
       
-      suggestBox.innerHTML = '<div style="padding:10px; color:#aaa; font-size:0.8rem; text-align:center;">検索中...</div>';
+      suggestBox.innerHTML = '<div style="padding:15px; color:#aaa; font-size:0.85rem; text-align:center;">検索中...</div>';
       suggestBox.style.display = 'block';
 
       searchTimeout = setTimeout(async () => {
+        let htmlStr = '';
+        
+        // 1. まず内蔵辞書から検索 (ひらがなカタカナ英語を柔軟にマッチ)
+        const qLower = query.toLowerCase();
+        const localMatches = CUSTOM_ALIASES.filter(item => 
+          item.name.toLowerCase().includes(qLower) || 
+          item.symbol.toLowerCase().includes(qLower) ||
+          (qLower === 'オルカン' && item.name.includes('全世界'))
+        );
+        
+        if (localMatches.length > 0) {
+          htmlStr += localMatches.map(q => {
+            const safeName = q.name.replace(/'/g, "\\'");
+            return `<div class="suggestion-item" onmousedown="window.selectStock('${q.symbol}', '${safeName}')" ontouchstart="window.selectStock('${q.symbol}', '${safeName}')">
+                      <div>${q.symbol} <span class="suggestion-badge">${q.type}</span></div>
+                      <div>${q.name}</div>
+                    </div>`;
+          }).join('');
+        }
+
+        // 2. その後、Yahoo APIの結果を追加
         const res = await callGasApi({ action: 'searchStock', q: query });
         if (res && res.quotes && res.quotes.length > 0) {
-          suggestBox.innerHTML = res.quotes.map(q => {
-            const safeName = (q.shortname || q.longname || '').replace(/'/g, "\\'");
-            return `<div class="suggestion-item" onclick="selectStock('${q.symbol}', '${safeName}')"><div>${q.symbol}</div><div>${q.shortname || q.longname} (${q.exchDisp})</div></div>`;
+          // 辞書で出たシンボルと重複するものを除外
+          const apiUnique = res.quotes.filter(q => !localMatches.some(l => l.symbol === q.symbol));
+          htmlStr += apiUnique.map(q => {
+            const safeName = (q.shortname || q.longname || q.symbol).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            return `<div class="suggestion-item" onmousedown="window.selectStock('${q.symbol}', '${safeName}')" ontouchstart="window.selectStock('${q.symbol}', '${safeName}')">
+                      <div>${q.symbol}</div>
+                      <div>${q.shortname || q.longname || ''} <span style="opacity:0.6;">(${q.exchDisp || '不明'})</span></div>
+                    </div>`;
           }).join('');
-        } else {
-          suggestBox.innerHTML = '<div style="padding:10px; color:#aaa; font-size:0.8rem; text-align:center;">見つかりませんでした</div>';
         }
-      }, 500);
+
+        if (htmlStr === '') {
+          suggestBox.innerHTML = '<div style="padding:15px; color:#aaa; font-size:0.85rem; text-align:center;">見つかりませんでした</div>';
+        } else {
+          suggestBox.innerHTML = htmlStr;
+        }
+      }, 400); // タイピングが終わってから検索開始
     });
-    document.addEventListener('click', (e) => { if (!input.contains(e.target) && !suggestBox.contains(e.target)) suggestBox.style.display = 'none'; });
+
+    // フォーカスが外れたら閉じる（クリック判定を生かすため遅延）
+    input.addEventListener('blur', () => { setTimeout(() => { suggestBox.style.display = 'none'; }, 200); });
   }
 
-  function selectStock(symbol, name) {
+  window.selectStock = function(symbol, name) {
     if(!appState.markets) appState.markets = [];
-    appState.markets.push({ symbol: symbol, label: name });
+    if(appState.markets.some(m => m.symbol === symbol)) {
+      alert('「' + name + '」は既に登録されています');
+    } else {
+      appState.markets.push({ symbol: symbol, label: name });
+      save(); 
+      fetchMarketTicker();
+      Object.keys(chartDataCache).forEach(k => { chartDataCache[k].raw = []; }); 
+      renderAll(); 
+    }
     document.getElementById('stock-search-input').value = '';
     document.getElementById('stock-suggestions').style.display = 'none';
-    save(); fetchMarketTicker(); renderAll();
-  }
+  };
 
   function toggleGeminiMode() { isGeminiMode = !isGeminiMode; document.getElementById('gemini-options-panel').style.display = isGeminiMode ? 'flex' : 'none'; document.getElementById('gemini-toggle-btn').classList.toggle('active', isGeminiMode); }
   function handleSearchSubmit(e) {
@@ -285,7 +338,8 @@
       return html + `</div>`;
     }).join('');
   }
-  function deleteMarketSymbol(i) { appState.markets.splice(i,1); save(); fetchMarketTicker(); renderAll(); }
+  
+  window.deleteMarketSymbol = function(i) { appState.markets.splice(i,1); save(); fetchMarketTicker(); Object.keys(chartDataCache).forEach(k => { chartDataCache[k].raw = []; }); renderAll(); }
 
   // 比較チャートロジック
   async function fetchAndRenderChart(widgetId, period) {
@@ -312,7 +366,7 @@
     renderChartOnly(widgetId, period);
   }
 
-  function renderChartOnly(widgetId, period) {
+  window.renderChartOnly = function(widgetId, period) {
     const cache = chartDataCache[widgetId]; if (!cache) return;
     cache.period = period; const rawData = cache.raw;
 
@@ -358,7 +412,7 @@
 
     const pLabels = {'1W':'1週間', '1M':'1ヶ月', '3M':'3ヶ月', '6M':'半年', 'YTD':'年初来', '1Y':'1年'};
     document.getElementById('chart-controls-' + widgetId).innerHTML = Object.keys(pLabels).map(p => 
-      `<button onclick="renderChartOnly('${widgetId}', '${p}')" style="background:${p===period ? 'rgba(130,200,255,0.3)' : 'transparent'}; border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:4px; padding:4px 8px; margin-right:5px; cursor:pointer; font-size:0.8rem;">${pLabels[p]}</button>`
+      `<button onclick="window.renderChartOnly('${widgetId}', '${p}')" style="background:${p===period ? 'rgba(130,200,255,0.3)' : 'transparent'}; border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:4px; padding:4px 8px; margin-right:5px; cursor:pointer; font-size:0.8rem;">${pLabels[p]}</button>`
     ).join('');
     document.getElementById('chart-summary-' + widgetId).innerHTML = summaryHtml;
 
@@ -379,7 +433,7 @@
         }
       }
     });
-  }
+  };
 
   // カレンダー
   async function loadCalendarData(id, y, m) {
@@ -400,7 +454,7 @@
     }
     container.innerHTML = html + '</div>';
   }
-  function moveMonth(id, d) { let c = calCache[id]; let m = c.targetMonth+d; let y = c.targetYear; if(m>12){m=1;y++} if(m<1){m=12;y--} loadCalendarData(id,y,m); }
+  window.moveMonth = function(id, d) { let c = calCache[id]; let m = c.targetMonth+d; let y = c.targetYear; if(m>12){m=1;y++} if(m<1){m=12;y--} loadCalendarData(id,y,m); }
 
   // 枠管理 (ドラッグ＆ドロップ)
   function initDragEvents() {
@@ -506,18 +560,18 @@
     } catch (e) { document.getElementById('error-overlay').style.display = 'flex'; }
   }
 
-  function toggleEditMode() { isEditMode = !isEditMode; document.body.classList.toggle('is-edit-mode', isEditMode); document.getElementById('edit-toggle-btn').textContent = isEditMode ? '完了' : '⚙️ 編集モード'; renderAll(); fetchMarketTicker(); }
-  function setWidth(id, p) { findWidget(id).widthPct = p; save(); renderAll(); }
-  function addB(id) { const t=prompt('名:'); const u=prompt('URL:'); if(t&&u){ findWidget(id).items.push({title:t,url:u}); save(); renderAll(); } }
-  function delB(id, i) { findWidget(id).items.splice(i,1); save(); renderAll(); }
-  function addR(id) { const u=prompt('URL:'); const n=prompt('名:'); if(u&&n){ findWidget(id).urls.push({url:u,name:n}); save(); renderAll(); } }
-  function delR(id, i) { findWidget(id).urls.splice(i,1); save(); renderAll(); }
+  window.toggleEditMode = function() { isEditMode = !isEditMode; document.body.classList.toggle('is-edit-mode', isEditMode); document.getElementById('edit-toggle-btn').textContent = isEditMode ? '完了' : '⚙️ 編集モード'; renderAll(); fetchMarketTicker(); }
+  window.setWidth = function(id, p) { findWidget(id).widthPct = p; save(); renderAll(); }
+  window.addB = function(id) { const t=prompt('名:'); const u=prompt('URL:'); if(t&&u){ findWidget(id).items.push({title:t,url:u}); save(); renderAll(); } }
+  window.delB = function(id, i) { findWidget(id).items.splice(i,1); save(); renderAll(); }
+  window.addR = function(id) { const u=prompt('URL:'); const n=prompt('名:'); if(u&&n){ findWidget(id).urls.push({url:u,name:n}); save(); renderAll(); } }
+  window.delR = function(id, i) { findWidget(id).urls.splice(i,1); save(); renderAll(); }
   function save() { localStorage.setItem('portal_state', JSON.stringify(appState)); }
   function findWidget(id) { for(let r of appState.rows) { for(let w of r) { if(w.id === id) return w; } } }
-  function deleteWidget(id) { appState.rows.forEach(r => { const i = r.findIndex(w => w.id === id); if(i>-1) r.splice(i,1); }); save(); renderAll(); }
-  function addNewRow() { appState.rows.push([]); save(); renderAll(); }
-  function addNewWidget(type) { const t = prompt('タイトル:'); if(t===null) return; const w = { id: 'w'+Date.now(), type, title: t, widthPct: 100, items: [], urls: [] }; if(!appState.rows.length) appState.rows.push([]); appState.rows[appState.rows.length-1].push(w); save(); renderAll(); }
-  function saveHeaderSettings() { appState.clock.size = document.getElementById('clock-size').value; appState.clock.font = document.getElementById('clock-font').value; appState.headlineUrl = document.getElementById('headline-url').value; appState.headlineSpeed = document.getElementById('headline-speed').value; save(); }
+  window.deleteWidget = function(id) { appState.rows.forEach(r => { const i = r.findIndex(w => w.id === id); if(i>-1) r.splice(i,1); }); save(); renderAll(); }
+  window.addNewRow = function() { appState.rows.push([]); save(); renderAll(); }
+  window.addNewWidget = function(type) { const t = prompt('タイトル:'); if(t===null) return; const w = { id: 'w'+Date.now(), type, title: t, widthPct: 100, items: [], urls: [] }; if(!appState.rows.length) appState.rows.push([]); appState.rows[appState.rows.length-1].push(w); save(); renderAll(); }
+  window.saveHeaderSettings = function() { appState.clock.size = document.getElementById('clock-size').value; appState.clock.font = document.getElementById('clock-font').value; appState.headlineUrl = document.getElementById('headline-url').value; appState.headlineSpeed = document.getElementById('headline-speed').value; save(); }
   
   function initResize(e, leftId, rightId) {
     const leftW = findWidget(leftId); const rightW = findWidget(rightId); const startX = e.clientX; const startL = leftW.widthPct; const startR = rightW.widthPct;
