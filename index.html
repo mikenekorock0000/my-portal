@@ -122,11 +122,13 @@
     <div class="headline-ticker glass" style="margin-top:10px; padding:0;">
       <div class="headline-content" id="headline-content">ニュース読込中...</div>
     </div>
-    <div class="edit-only" style="gap:10px; align-items:center; background:rgba(0,0,0,0.2); padding:10px; border-radius:10px; margin-top:5px;">
-      <input type="text" id="headline-url" placeholder="RSS URL" style="flex-grow:1;">
-      <span style="font-size:0.8rem;">速度:</span>
-      <input type="range" id="headline-speed" min="10" max="120" oninput="applyHeadlineSpeed()" onchange="saveHeaderSettings()">
-      <button class="ui-btn" onclick="saveHeaderSettings(); fetchHeadlineRss();">更新</button>
+    <div class="edit-only" style="gap:10px; align-items:flex-start; background:rgba(0,0,0,0.2); padding:10px; border-radius:10px; margin-top:5px;">
+      <textarea id="headline-url" placeholder="RSS URL（1行に1つ、複数可）" rows="3" style="flex-grow:1; font-family: monospace; font-size: 0.85rem; padding: 8px 12px; border-radius: 8px; border: none; background: rgba(255, 255, 255, 0.9); color: #333; outline: none; resize: vertical;"></textarea>
+      <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+        <span style="font-size:0.8rem;">速度:</span>
+        <input type="range" id="headline-speed" min="10" max="120" oninput="applyHeadlineSpeed()" onchange="saveHeaderSettings()">
+        <button class="ui-btn" onclick="saveHeaderSettings(); fetchHeadlineRss();">更新</button>
+      </div>
     </div>
 
     <div class="search-container">
@@ -320,12 +322,32 @@
   function applyHeadlineSpeed() { const s = document.getElementById('headline-speed').value; const el = document.querySelector('.headline-content'); if(el) el.style.animationDuration = s + 's'; }
 
   async function fetchHeadlineRss() {
-    if(!appState.headlineUrl) return;
-    const res = await callGasApi({ action: 'rss', url: appState.headlineUrl });
-    if(!res.data) return;
-    const parser = new DOMParser(); const xml = parser.parseFromString(res.data, 'text/xml');
-    const items = Array.from(xml.querySelectorAll('item')).slice(0, 10);
-    document.getElementById('headline-content').innerHTML = items.map(i => `<a href="${i.querySelector('link')?.textContent}" target="_blank" class="headline-item"><span class="headline-badge">NEW</span>${i.querySelector('title')?.textContent}</a>`).join('');
+    const urls = appState.headlineUrls || [];
+    if(!urls.length) return;
+    const all = [];
+    await Promise.all(urls.map(async (url) => {
+      try {
+        const res = await callGasApi({ action: 'rss', url });
+        if(!res.data) return;
+        const xml = new DOMParser().parseFromString(res.data, 'text/xml');
+        const channelTitle = xml.querySelector('channel > title')?.textContent || '';
+        Array.from(xml.querySelectorAll('item')).forEach(i => {
+          all.push({
+            title: i.querySelector('title')?.textContent || '',
+            link: i.querySelector('link')?.textContent || '#',
+            source: channelTitle,
+            ts: new Date(i.querySelector('pubDate')?.textContent).getTime() || 0
+          });
+        });
+      } catch(e) {}
+    }));
+    if(!all.length) return;
+    all.sort((a,b) => b.ts - a.ts);
+    const items = all.slice(0, 20);
+    const showSource = urls.length > 1;
+    document.getElementById('headline-content').innerHTML = items.map(i =>
+      `<a href="${i.link}" target="_blank" class="headline-item"><span class="headline-badge">${showSource && i.source ? i.source : 'NEW'}</span>${i.title}</a>`
+    ).join('');
   }
 
   async function fetchMarketTicker() {
@@ -743,7 +765,7 @@
       }
       
       items.sort((a,b) => b.ts - a.ts);
-      cont.innerHTML = '<ul>' + items.slice(0, 6).map(i => `<li><div class="item-content"><small class="headline-badge" style="background:none; border:1px solid #82c8ff; color:#82c8ff; font-weight:normal; padding:1px 4px;">${i.s}</small><a href="${i.l}" target="_blank">${i.t}</a></div></li>`).join('') + '</ul>';
+      cont.innerHTML = '<ul>' + items.slice(0, 12).map(i => `<li><div class="item-content"><small class="headline-badge" style="background:none; border:1px solid #82c8ff; color:#82c8ff; font-weight:normal; padding:1px 4px;">${i.s}</small><a href="${i.l}" target="_blank">${i.t}</a></div></li>`).join('') + '</ul>';
     } catch(e) {
        cont.innerHTML = '<div style="padding:15px; font-size:0.85rem; color:#ff8a80; text-align:center;">通信エラーが発生しました。</div>';
     }
@@ -753,10 +775,15 @@
   function initDataSafely() {
     try {
       const saved = localStorage.getItem('portal_state');
-      if (saved) { appState = JSON.parse(saved); if (!appState.rows || !Array.isArray(appState.rows)) appState.rows = [[]]; } 
+      if (saved) { appState = JSON.parse(saved); if (!appState.rows || !Array.isArray(appState.rows)) appState.rows = [[]]; }
       else {
-        appState = { clock: { size: 2.2, font: 'system-ui' }, headlineUrl: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml', headlineSpeed: 45, markets: [{ symbol: '^GSPC', label: 'S&P 500' }, { symbol: '^N225', label: '日経平均' }], rows: [[{ id: 'w1', type: 'bookmark', title: 'Daily', widthPct: 50, items: [{ title: 'Google', url: 'https://google.com' }] }, { id: 'w2', type: 'rss', title: 'News', widthPct: 50, urls: [{ url: 'https://news.yahoo.co.jp/rss/topics/it.xml', name: 'Yahoo! IT' }] }]] };
+        appState = { clock: { size: 2.2, font: 'system-ui' }, headlineUrls: ['https://news.yahoo.co.jp/rss/topics/top-picks.xml'], headlineSpeed: 45, markets: [{ symbol: '^GSPC', label: 'S&P 500' }, { symbol: '^N225', label: '日経平均' }], rows: [[{ id: 'w1', type: 'bookmark', title: 'Daily', widthPct: 50, items: [{ title: 'Google', url: 'https://google.com' }] }, { id: 'w2', type: 'rss', title: 'News', widthPct: 50, urls: [{ url: 'https://news.yahoo.co.jp/rss/topics/it.xml', name: 'Yahoo! IT' }] }]] };
       }
+      if (typeof appState.headlineUrl === 'string') {
+        appState.headlineUrls = appState.headlineUrl ? [appState.headlineUrl] : [];
+        delete appState.headlineUrl;
+      }
+      if (!Array.isArray(appState.headlineUrls)) appState.headlineUrls = [];
     } catch (e) { document.getElementById('error-overlay').style.display = 'flex'; }
   }
 
@@ -771,7 +798,13 @@
   window.deleteWidget = function(id) { appState.rows.forEach(r => { const i = r.findIndex(w => w.id === id); if(i>-1) r.splice(i,1); }); save(); renderAll(); }
   window.addNewRow = function() { appState.rows.push([]); save(); renderAll(); }
   window.addNewWidget = function(type) { const t = prompt('タイトル:'); if(t===null) return; const w = { id: 'w'+Date.now(), type, title: t, widthPct: 100, items: [], urls: [] }; if(!appState.rows.length) appState.rows.push([]); appState.rows[appState.rows.length-1].push(w); save(); renderAll(); }
-  window.saveHeaderSettings = function() { appState.clock.size = document.getElementById('clock-size').value; appState.clock.font = document.getElementById('clock-font').value; appState.headlineUrl = document.getElementById('headline-url').value; appState.headlineSpeed = document.getElementById('headline-speed').value; save(); }
+  window.saveHeaderSettings = function() {
+    appState.clock.size = document.getElementById('clock-size').value;
+    appState.clock.font = document.getElementById('clock-font').value;
+    appState.headlineUrls = document.getElementById('headline-url').value.split('\n').map(s => s.trim()).filter(Boolean);
+    appState.headlineSpeed = document.getElementById('headline-speed').value;
+    save();
+  }
   
   function initResize(e, leftId, rightId) {
     const leftW = findWidget(leftId); const rightW = findWidget(rightId); 
@@ -801,7 +834,7 @@
   window.onload = () => {
     initDataSafely();
     if(appState) {
-      document.getElementById('clock-size').value = appState.clock.size; document.getElementById('clock-font').value = appState.clock.font; document.getElementById('headline-url').value = appState.headlineUrl || ''; document.getElementById('headline-speed').value = appState.headlineSpeed || 45;
+      document.getElementById('clock-size').value = appState.clock.size; document.getElementById('clock-font').value = appState.clock.font; document.getElementById('headline-url').value = (appState.headlineUrls || []).join('\n'); document.getElementById('headline-speed').value = appState.headlineSpeed || 45;
       applyBackground(); applyClockStyle(); applyHeadlineSpeed(); renderAll(); fetchHeadlineRss(); fetchMarketTicker(); initStockSearch(); updateClock(); setInterval(updateClock, 1000);
       
       window.addEventListener('resize', () => { 
