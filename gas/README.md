@@ -40,15 +40,13 @@ clasp login
 cd gas
 ```
 
-### 5. GAS プロジェクトを新規作成
+### 5. アップロード先 GAS プロジェクト
 
-```bash
-clasp create --type standalone --title "Yearly Calendar Template" --rootDir .
-```
+`.clasp.json` に対象プロジェクトの `scriptId` を設定済みなので、**この手順は不要**です。
+別のプロジェクトに切り替えたい場合だけ `gas/.clasp.json` の `scriptId` を書き換えてください。
 
-このコマンドで `.clasp.json` が自動生成されます (Git には含めません)。
-
-> 既存の GAS プロジェクトに反映したい場合は `clasp clone <scriptId> --rootDir .` を使ってください。
+> 新規作成: `clasp create --type standalone --title "..." --rootDir .`
+> 既存IDから取得: `clasp clone <scriptId> --rootDir .`
 
 ### 6. ソースをアップロード
 
