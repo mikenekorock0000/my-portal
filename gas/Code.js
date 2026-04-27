@@ -45,9 +45,27 @@ const CONFIG = {
   COLOR_SUN: '#C62828',
   COLOR_TEXT: '#222',
   COLOR_GRID: '#888',
-  COLOR_HEAD_BG: '#F2F2F2',
+  COLOR_RULE: '#E8E8E8',     // 薄い罫線
+  RULE_GAP: 26,              // 罫線の間隔
+  RULE_TOP_OFFSET: 60,       // 日付の下から罫線開始
   FONT: 'Helvetica, Arial, "Hiragino Sans", "Yu Gothic", sans-serif'
 };
+
+/** 月ごとの色 (0=1月 ... 11=12月). main=タイトル/枠, bg=ヘッダ背景, dow=曜日行背景 */
+const MONTH_COLORS = [
+  { main: '#1E88E5', bg: '#BBDEFB', dow: '#E3F2FD' }, //  1月 winter blue
+  { main: '#C2185B', bg: '#F8BBD0', dow: '#FCE4EC' }, //  2月 plum
+  { main: '#7CB342', bg: '#DCEDC8', dow: '#F1F8E9' }, //  3月 spring green
+  { main: '#EC407A', bg: '#FCE4EC', dow: '#FFF0F5' }, //  4月 sakura
+  { main: '#43A047', bg: '#C8E6C9', dow: '#E8F5E9' }, //  5月 fresh green
+  { main: '#5C6BC0', bg: '#C5CAE9', dow: '#E8EAF6' }, //  6月 hydrangea
+  { main: '#00ACC1', bg: '#B2EBF2', dow: '#E0F7FA' }, //  7月 sea cyan
+  { main: '#FBC02D', bg: '#FFF59D', dow: '#FFFDE7' }, //  8月 sunflower
+  { main: '#FB8C00', bg: '#FFE0B2', dow: '#FFF3E0' }, //  9月 harvest
+  { main: '#E53935', bg: '#FFCDD2', dow: '#FFEBEE' }, // 10月 maple red
+  { main: '#8D6E63', bg: '#D7CCC8', dow: '#EFEBE9' }, // 11月 ginkgo brown
+  { main: '#00695C', bg: '#B2DFDB', dow: '#E0F2F1' }  // 12月 deep teal
+];
 
 const MONTH_JP = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 const DOW_JP   = ['月','火','水','木','金','土','日'];
@@ -118,15 +136,21 @@ function createCalendarTemplate(startYear) {
 function renderMonth(year, month, ox, oy) {
   const w = CONFIG.CELL_W, h = CONFIG.CELL_H;
   const monthW = w * 7;
+  const monthH = CONFIG.HEADER_H + CONFIG.DOW_H + h * 6;
+  const mc = MONTH_COLORS[month];
 
   let s = `<g transform="translate(${ox},${oy})">`;
-  s += `<text x="${monthW / 2}" y="${CONFIG.HEADER_H * 0.72}" font-family="${CONFIG.FONT}" font-size="56" font-weight="bold" text-anchor="middle" fill="${CONFIG.COLOR_TEXT}">${year}年 ${MONTH_JP[month]}</text>`;
 
+  // タイトル帯 (月の色)
+  s += `<rect x="0" y="0" width="${monthW}" height="${CONFIG.HEADER_H}" fill="${mc.bg}"/>`;
+  s += `<text x="${monthW / 2}" y="${CONFIG.HEADER_H * 0.72}" font-family="${CONFIG.FONT}" font-size="56" font-weight="bold" text-anchor="middle" fill="${mc.main}">${year}年 ${MONTH_JP[month]}</text>`;
+
+  // 曜日ヘッダ (月のうす色背景)
   for (let i = 0; i < 7; i++) {
     const dx = i * w;
     const dy = CONFIG.HEADER_H;
     const color = i === 5 ? CONFIG.COLOR_SAT : i === 6 ? CONFIG.COLOR_SUN : CONFIG.COLOR_TEXT;
-    s += `<rect x="${dx}" y="${dy}" width="${w}" height="${CONFIG.DOW_H}" fill="${CONFIG.COLOR_HEAD_BG}" stroke="${CONFIG.COLOR_GRID}" stroke-width="1.2"/>`;
+    s += `<rect x="${dx}" y="${dy}" width="${w}" height="${CONFIG.DOW_H}" fill="${mc.dow}" stroke="${CONFIG.COLOR_GRID}" stroke-width="1.2"/>`;
     s += `<text x="${dx + w / 2}" y="${dy + CONFIG.DOW_H * 0.72}" font-family="${CONFIG.FONT}" font-size="30" font-weight="bold" text-anchor="middle" fill="${color}">${DOW_JP[i]}</text>`;
   }
 
@@ -144,11 +168,23 @@ function renderMonth(year, month, ox, oy) {
       const color = dow === 5 ? CONFIG.COLOR_SAT : dow === 6 ? CONFIG.COLOR_SUN : CONFIG.COLOR_TEXT;
 
       s += `<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${fill}" stroke="${CONFIG.COLOR_GRID}" stroke-width="1.2"/>`;
+
       if (inMonth) {
+        // 日付番号
         s += `<text x="${cx + 14}" y="${cy + 42}" font-family="${CONFIG.FONT}" font-size="36" font-weight="bold" fill="${color}">${dayNum}</text>`;
+
+        // 薄い罫線 (拡大時に書きやすい)
+        const lineEndY = cy + h - 12;
+        const inset = 12;
+        for (let ly = cy + CONFIG.RULE_TOP_OFFSET; ly <= lineEndY; ly += CONFIG.RULE_GAP) {
+          s += `<line x1="${cx + inset}" y1="${ly}" x2="${cx + w - inset}" y2="${ly}" stroke="${CONFIG.COLOR_RULE}" stroke-width="0.6"/>`;
+        }
       }
     }
   }
+
+  // 月全体を月の色の枠で囲む (判別性アップ)
+  s += `<rect x="0" y="0" width="${monthW}" height="${monthH}" fill="none" stroke="${mc.main}" stroke-width="3"/>`;
 
   s += '</g>';
   return s;
