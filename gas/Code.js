@@ -86,6 +86,8 @@ function createCalendarTemplate(startYear) {
     months.push({ year: y, month: m });
   }
 
+  const holidays = fetchJapaneseHolidays();
+
   const monthW = CONFIG.CELL_W * 7;
   const monthH = CONFIG.HEADER_H + CONFIG.DOW_H + CONFIG.CELL_H * 6;
   const cols = 6, rows = 2;
@@ -98,7 +100,7 @@ function createCalendarTemplate(startYear) {
     const c = i % 6;
     const x = CONFIG.PAGE_PAD + c * (monthW + CONFIG.MONTH_GAP);
     const y = CONFIG.PAGE_PAD + r * (monthH + CONFIG.MONTH_GAP);
-    body += renderMonth(months[i].year, months[i].month, x, y);
+    body += renderMonth(months[i].year, months[i].month, x, y, holidays);
   }
 
   const title = `${startYear}年度 (${startYear}.4 - ${startYear + 1}.3)`;
@@ -133,7 +135,39 @@ function createCalendarTemplate(startYear) {
   };
 }
 
-function renderMonth(year, month, ox, oy) {
+/** 日本の祝日 (yyyy-MM-dd → 名前) を取得。失敗時は {} */
+function fetchJapaneseHolidays() {
+  try {
+    const cacheKey = 'jp_holidays_v1';
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    const url = 'https://holidays-jp.github.io/api/v1/date.json';
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return {};
+    const data = JSON.parse(res.getContentText());
+    cache.put(cacheKey, JSON.stringify(data), 21600); // 6h
+    return data;
+  } catch (e) {
+    Logger.log('祝日取得失敗: ' + e);
+    return {};
+  }
+}
+
+function dateKey(year, month0, day) {
+  const m = String(month0 + 1).padStart(2, '0');
+  const d = String(day).padStart(2, '0');
+  return `${year}-${m}-${d}`;
+}
+
+function escapeXml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
+  }[c]));
+}
+
+function renderMonth(year, month, ox, oy, holidays) {
   const w = CONFIG.CELL_W, h = CONFIG.CELL_H;
   const monthW = w * 7;
   const monthH = CONFIG.HEADER_H + CONFIG.DOW_H + h * 6;
@@ -165,13 +199,25 @@ function renderMonth(year, month, ox, oy) {
       const dayNum = week * 7 + dow - startCol + 1;
       const inMonth = dayNum >= 1 && dayNum <= lastDay;
       const fill = inMonth ? 'white' : '#ECECEC';
-      const color = dow === 5 ? CONFIG.COLOR_SAT : dow === 6 ? CONFIG.COLOR_SUN : CONFIG.COLOR_TEXT;
+
+      const holidayName = inMonth ? (holidays && holidays[dateKey(year, month, dayNum)]) : null;
+      let color;
+      if (holidayName) color = CONFIG.COLOR_SUN;
+      else if (dow === 5) color = CONFIG.COLOR_SAT;
+      else if (dow === 6) color = CONFIG.COLOR_SUN;
+      else color = CONFIG.COLOR_TEXT;
 
       s += `<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${fill}" stroke="${CONFIG.COLOR_GRID}" stroke-width="1.2"/>`;
 
       if (inMonth) {
         // 日付番号
         s += `<text x="${cx + 14}" y="${cy + 42}" font-family="${CONFIG.FONT}" font-size="36" font-weight="bold" fill="${color}">${dayNum}</text>`;
+
+        // 祝日名 (右上に小さく赤)
+        if (holidayName) {
+          const name = holidayName.length > 9 ? holidayName.substring(0, 8) + '…' : holidayName;
+          s += `<text x="${cx + w - 12}" y="${cy + 38}" font-family="${CONFIG.FONT}" font-size="18" font-weight="bold" text-anchor="end" fill="${CONFIG.COLOR_SUN}">${escapeXml(name)}</text>`;
+        }
 
         // 薄い罫線 (拡大時に書きやすい)
         const lineEndY = cy + h - 12;
