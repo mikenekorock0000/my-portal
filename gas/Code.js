@@ -2,10 +2,12 @@
  * 4月始まり 12か月カレンダーテンプレート (上下6か月ずつ) を生成
  * SVG (ベクター) と PDF を Google Drive のマイドライブ直下に保存します。
  *
- * 使い方:
- *   1. run() を実行 (初回はDrive権限の承認ダイアログが出ます)
- *   2. 実行ログ (表示 > ログ) に SVG/PDF の URL が出る
- *   3. PDF を iPad の GoodNotes に読み込み or テンプレート登録
+ * 使い方A: Web UI から (推奨)
+ *   - GAS エディタ > 「デプロイ」> 「ウェブアプリ」として公開
+ *   - 表示された URL を開き、年を選んで「生成」を押す
+ *
+ * 使い方B: スクリプト直実行
+ *   - run() を実行 → 実行ログに SVG/PDF の URL が出る
  *
  * 仕様:
  *   - 4月始まりの 12 か月 (例: 2026/4 〜 2027/3)
@@ -14,6 +16,23 @@
  *   - 1日マスは 300×260pt と大きめ → 拡大時に約400字メモ可
  *   - SVG/PDF 共にベクターなので、無限拡大しても解像度劣化なし
  */
+
+/** Web App のエントリポイント (HTML を返す) */
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('カレンダーテンプレート生成')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** クライアントから google.script.run で呼ぶ生成API */
+function generate(startYear) {
+  const y = parseInt(startYear, 10);
+  if (!y || y < 1900 || y > 3000) {
+    throw new Error('正しい西暦年(1900-3000)を指定してください');
+  }
+  const result = createCalendarTemplate(y);
+  return result; // { svgUrl, pdfUrl, svgName, pdfName }
+}
 
 const CONFIG = {
   CELL_W: 300,
@@ -87,6 +106,13 @@ function createCalendarTemplate(startYear) {
 
   Logger.log('SVG: ' + svgFile.getUrl());
   Logger.log('PDF: ' + pdfFile.getUrl());
+
+  return {
+    svgUrl: svgFile.getUrl(),
+    pdfUrl: pdfFile.getUrl(),
+    svgName: svgFile.getName(),
+    pdfName: pdfFile.getName()
+  };
 }
 
 function renderMonth(year, month, ox, oy) {
