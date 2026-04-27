@@ -137,22 +137,97 @@ function createCalendarTemplate(startYear) {
 
 /** 日本の祝日 (yyyy-MM-dd → 名前) を取得。失敗時は {} */
 function fetchJapaneseHolidays() {
-  try {
-    const cacheKey = 'jp_holidays_v1';
-    const cache = CacheService.getScriptCache();
-    const cached = cache.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+  const cacheKey = 'jp_holidays_v2';
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* fallthrough */ }
+  }
 
-    const url = 'https://holidays-jp.github.io/api/v1/date.json';
-    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    if (res.getResponseCode() !== 200) return {};
-    const data = JSON.parse(res.getContentText());
-    cache.put(cacheKey, JSON.stringify(data), 21600); // 6h
-    return data;
+  // 1. 内閣府公式 CSV (Shift_JIS) — 一次ソース
+  let data = fetchHolidaysFromCabinetOffice();
+
+  // 2. フォールバック: holidays-jp.github.io
+  if (!data || Object.keys(data).length === 0) {
+    data = fetchHolidaysFromHolidaysJp();
+  }
+
+  if (data && Object.keys(data).length > 0) {
+    try { cache.put(cacheKey, JSON.stringify(data), 21600); } catch (e) {}
+  }
+  return data || {};
+}
+
+function fetchHolidaysFromCabinetOffice() {
+  try {
+    const url = 'https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv';
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    if (res.getResponseCode() !== 200) {
+      Logger.log('CabinetOffice HTTP ' + res.getResponseCode());
+      return {};
+    }
+    const text = res.getBlob().getDataAsString('Shift_JIS');
+    const map = {};
+    const lines = text.split(/\r?\n/);
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const parts = line.split(',');
+      if (parts.length < 2) continue;
+      const dm = parts[0].split('/');
+      if (dm.length !== 3) continue;
+      const key = `${dm[0]}-${String(dm[1]).padStart(2,'0')}-${String(dm[2]).padStart(2,'0')}`;
+      map[key] = parts[1];
+    }
+    Logger.log('CabinetOffice: ' + Object.keys(map).length + ' holidays');
+    return map;
   } catch (e) {
-    Logger.log('祝日取得失敗: ' + e);
+    Logger.log('CabinetOffice fetch failed: ' + e);
     return {};
   }
+}
+
+function fetchHolidaysFromHolidaysJp() {
+  try {
+    const url = 'https://holidays-jp.github.io/api/v1/date.json';
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    if (res.getResponseCode() !== 200) {
+      Logger.log('holidays-jp HTTP ' + res.getResponseCode());
+      return {};
+    }
+    const data = JSON.parse(res.getContentText());
+    Logger.log('holidays-jp: ' + Object.keys(data).length + ' holidays');
+    return data;
+  } catch (e) {
+    Logger.log('holidays-jp fetch failed: ' + e);
+    return {};
+  }
+}
+
+/** デバッグ用: 祝日が取れているかをログに出す */
+function testHolidays() {
+  CacheService.getScriptCache().remove('jp_holidays_v2');
+  const h = fetchJapaneseHolidays();
+  const keys = Object.keys(h).sort();
+  Logger.log('total: ' + keys.length);
+  if (keys.length === 0) {
+    Logger.log('==> 祝日が0件。appsscript.json の oauthScopes に script.external_request があるか / 再認可済みか を確認してください');
+    return;
+  }
+  Logger.log('first: ' + keys[0] + ' = ' + h[keys[0]]);
+  Logger.log('last : ' + keys[keys.length - 1] + ' = ' + h[keys[keys.length - 1]]);
+  ['2026','2027'].forEach(y => {
+    const ks = keys.filter(k => k.startsWith(y));
+    Logger.log(y + ': ' + ks.length + '件');
+    ks.slice(0, 3).forEach(k => Logger.log('  ' + k + ' ' + h[k]));
+  });
+}
+
+/** デバッグ用: 祝日キャッシュをクリア */
+function clearHolidayCache() {
+  CacheService.getScriptCache().remove('jp_holidays_v2');
+  CacheService.getScriptCache().remove('jp_holidays_v1');
+  Logger.log('Cleared');
 }
 
 function dateKey(year, month0, day) {
