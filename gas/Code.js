@@ -164,7 +164,7 @@ function renderMonth(year, month, ox, oy) {
       const cy = CONFIG.HEADER_H + CONFIG.DOW_H + week * h;
       const dayNum = week * 7 + dow - startCol + 1;
       const inMonth = dayNum >= 1 && dayNum <= lastDay;
-      const fill = inMonth ? 'white' : '#FAFAFA';
+      const fill = inMonth ? 'white' : '#ECECEC';
       const color = dow === 5 ? CONFIG.COLOR_SAT : dow === 6 ? CONFIG.COLOR_SUN : CONFIG.COLOR_TEXT;
 
       s += `<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${fill}" stroke="${CONFIG.COLOR_GRID}" stroke-width="1.2"/>`;
