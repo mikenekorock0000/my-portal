@@ -68,6 +68,11 @@
     .cal-event { font-size: 0.75rem; padding: 3px 6px; border-radius: 4px; color: #fff; font-weight: 500; text-shadow: 1px 1px 2px #000; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
     ul { list-style: none; padding: 0; margin: 0; }
+    .rss-list::-webkit-scrollbar { width: 6px; }
+    .rss-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+    .rss-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
+    .rss-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.5); }
+    .rss-list { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) rgba(255,255,255,0.05); }
     li { display: flex; justify-content: space-between; align-items: center; padding: 8px; margin-bottom: 5px; background: rgba(255,255,255,0.05); border-radius: 8px; }
     .item-content a { color: #fff; text-decoration: none; }
     .drag-handle { cursor: grab; padding: 0 10px 0 0; color: rgba(255,255,255,0.5); font-size: 1.5rem; }
@@ -765,7 +770,7 @@
       }
       
       items.sort((a,b) => b.ts - a.ts);
-      cont.innerHTML = '<ul>' + items.slice(0, 12).map(i => `<li><div class="item-content"><small class="headline-badge" style="background:none; border:1px solid #82c8ff; color:#82c8ff; font-weight:normal; padding:1px 4px;">${i.s}</small><a href="${i.l}" target="_blank">${i.t}</a></div></li>`).join('') + '</ul>';
+      cont.innerHTML = '<ul class="rss-list" style="max-height:500px; overflow-y:auto; padding-right:4px;">' + items.slice(0, 50).map(i => `<li><div class="item-content"><small class="headline-badge" style="background:none; border:1px solid #82c8ff; color:#82c8ff; font-weight:normal; padding:1px 4px;">${i.s}</small><a href="${i.l}" target="_blank">${i.t}</a></div></li>`).join('') + '</ul>';
     } catch(e) {
        cont.innerHTML = '<div style="padding:15px; font-size:0.85rem; color:#ff8a80; text-align:center;">通信エラーが発生しました。</div>';
     }
