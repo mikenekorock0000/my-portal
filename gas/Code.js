@@ -135,99 +135,111 @@ function createCalendarTemplate(startYear) {
   };
 }
 
-/** 日本の祝日 (yyyy-MM-dd → 名前) を取得。失敗時は {} */
+/**
+ * 内閣府公式データに基づく日本の祝日 (2024〜2027)
+ * 必要な年が増えたら下に追記してください。
+ * 春分/秋分/振替/国民の休日 まで含む。
+ */
+const EMBEDDED_HOLIDAYS = {
+  // 2024
+  '2024-01-01': '元日',
+  '2024-01-08': '成人の日',
+  '2024-02-11': '建国記念の日',
+  '2024-02-12': '休日 振替休日',
+  '2024-02-23': '天皇誕生日',
+  '2024-03-20': '春分の日',
+  '2024-04-29': '昭和の日',
+  '2024-05-03': '憲法記念日',
+  '2024-05-04': 'みどりの日',
+  '2024-05-05': 'こどもの日',
+  '2024-05-06': '休日 振替休日',
+  '2024-07-15': '海の日',
+  '2024-08-11': '山の日',
+  '2024-08-12': '休日 振替休日',
+  '2024-09-16': '敬老の日',
+  '2024-09-22': '秋分の日',
+  '2024-09-23': '休日 振替休日',
+  '2024-10-14': 'スポーツの日',
+  '2024-11-03': '文化の日',
+  '2024-11-04': '休日 振替休日',
+  '2024-11-23': '勤労感謝の日',
+
+  // 2025
+  '2025-01-01': '元日',
+  '2025-01-13': '成人の日',
+  '2025-02-11': '建国記念の日',
+  '2025-02-23': '天皇誕生日',
+  '2025-02-24': '休日 振替休日',
+  '2025-03-20': '春分の日',
+  '2025-04-29': '昭和の日',
+  '2025-05-03': '憲法記念日',
+  '2025-05-04': 'みどりの日',
+  '2025-05-05': 'こどもの日',
+  '2025-05-06': '休日 振替休日',
+  '2025-07-21': '海の日',
+  '2025-08-11': '山の日',
+  '2025-09-15': '敬老の日',
+  '2025-09-23': '秋分の日',
+  '2025-10-13': 'スポーツの日',
+  '2025-11-03': '文化の日',
+  '2025-11-23': '勤労感謝の日',
+  '2025-11-24': '休日 振替休日',
+
+  // 2026
+  '2026-01-01': '元日',
+  '2026-01-12': '成人の日',
+  '2026-02-11': '建国記念の日',
+  '2026-02-23': '天皇誕生日',
+  '2026-03-20': '春分の日',
+  '2026-04-29': '昭和の日',
+  '2026-05-03': '憲法記念日',
+  '2026-05-04': 'みどりの日',
+  '2026-05-05': 'こどもの日',
+  '2026-05-06': '休日 振替休日',
+  '2026-07-20': '海の日',
+  '2026-08-11': '山の日',
+  '2026-09-21': '敬老の日',
+  '2026-09-22': '休日 国民の休日',
+  '2026-09-23': '秋分の日',
+  '2026-10-12': 'スポーツの日',
+  '2026-11-03': '文化の日',
+  '2026-11-23': '勤労感謝の日',
+
+  // 2027
+  '2027-01-01': '元日',
+  '2027-01-11': '成人の日',
+  '2027-02-11': '建国記念の日',
+  '2027-02-23': '天皇誕生日',
+  '2027-03-21': '春分の日',
+  '2027-03-22': '休日 振替休日',
+  '2027-04-29': '昭和の日',
+  '2027-05-03': '憲法記念日',
+  '2027-05-04': 'みどりの日',
+  '2027-05-05': 'こどもの日',
+  '2027-07-19': '海の日',
+  '2027-08-11': '山の日',
+  '2027-09-20': '敬老の日',
+  '2027-09-23': '秋分の日',
+  '2027-10-11': 'スポーツの日',
+  '2027-11-03': '文化の日',
+  '2027-11-23': '勤労感謝の日'
+};
+
+/** 日本の祝日 (yyyy-MM-dd → 名前) を返す。静的データ。 */
 function fetchJapaneseHolidays() {
-  const cacheKey = 'jp_holidays_v2';
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get(cacheKey);
-  if (cached) {
-    try { return JSON.parse(cached); } catch (e) { /* fallthrough */ }
-  }
-
-  // 1. 内閣府公式 CSV (Shift_JIS) — 一次ソース
-  let data = fetchHolidaysFromCabinetOffice();
-
-  // 2. フォールバック: holidays-jp.github.io
-  if (!data || Object.keys(data).length === 0) {
-    data = fetchHolidaysFromHolidaysJp();
-  }
-
-  if (data && Object.keys(data).length > 0) {
-    try { cache.put(cacheKey, JSON.stringify(data), 21600); } catch (e) {}
-  }
-  return data || {};
-}
-
-function fetchHolidaysFromCabinetOffice() {
-  try {
-    const url = 'https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv';
-    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
-    if (res.getResponseCode() !== 200) {
-      Logger.log('CabinetOffice HTTP ' + res.getResponseCode());
-      return {};
-    }
-    const text = res.getBlob().getDataAsString('Shift_JIS');
-    const map = {};
-    const lines = text.split(/\r?\n/);
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const parts = line.split(',');
-      if (parts.length < 2) continue;
-      const dm = parts[0].split('/');
-      if (dm.length !== 3) continue;
-      const key = `${dm[0]}-${String(dm[1]).padStart(2,'0')}-${String(dm[2]).padStart(2,'0')}`;
-      map[key] = parts[1];
-    }
-    Logger.log('CabinetOffice: ' + Object.keys(map).length + ' holidays');
-    return map;
-  } catch (e) {
-    Logger.log('CabinetOffice fetch failed: ' + e);
-    return {};
-  }
-}
-
-function fetchHolidaysFromHolidaysJp() {
-  try {
-    const url = 'https://holidays-jp.github.io/api/v1/date.json';
-    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
-    if (res.getResponseCode() !== 200) {
-      Logger.log('holidays-jp HTTP ' + res.getResponseCode());
-      return {};
-    }
-    const data = JSON.parse(res.getContentText());
-    Logger.log('holidays-jp: ' + Object.keys(data).length + ' holidays');
-    return data;
-  } catch (e) {
-    Logger.log('holidays-jp fetch failed: ' + e);
-    return {};
-  }
+  return EMBEDDED_HOLIDAYS;
 }
 
 /** デバッグ用: 祝日が取れているかをログに出す */
 function testHolidays() {
-  CacheService.getScriptCache().remove('jp_holidays_v2');
   const h = fetchJapaneseHolidays();
   const keys = Object.keys(h).sort();
   Logger.log('total: ' + keys.length);
-  if (keys.length === 0) {
-    Logger.log('==> 祝日が0件。appsscript.json の oauthScopes に script.external_request があるか / 再認可済みか を確認してください');
-    return;
-  }
-  Logger.log('first: ' + keys[0] + ' = ' + h[keys[0]]);
-  Logger.log('last : ' + keys[keys.length - 1] + ' = ' + h[keys[keys.length - 1]]);
   ['2026','2027'].forEach(y => {
     const ks = keys.filter(k => k.startsWith(y));
     Logger.log(y + ': ' + ks.length + '件');
-    ks.slice(0, 3).forEach(k => Logger.log('  ' + k + ' ' + h[k]));
+    ks.forEach(k => Logger.log('  ' + k + ' ' + h[k]));
   });
-}
-
-/** デバッグ用: 祝日キャッシュをクリア */
-function clearHolidayCache() {
-  CacheService.getScriptCache().remove('jp_holidays_v2');
-  CacheService.getScriptCache().remove('jp_holidays_v1');
-  Logger.log('Cleared');
 }
 
 function dateKey(year, month0, day) {
