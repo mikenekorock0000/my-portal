@@ -1,0 +1,4 @@
+# clasp はこのディレクトリ内の .js / appsscript.json のみをアップロード
+**/**
+!Code.js
+!appsscript.json
