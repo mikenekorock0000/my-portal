@@ -1,0 +1,3 @@
+# clasp の認証情報 (OAuthトークン) — 絶対に Git管理しない
+gas/.clasprc.json
+.clasprc.json
